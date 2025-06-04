@@ -197,62 +197,6 @@ def welcome_screen():
         else:
             st.error("Please enter a valid Participant ID")
 
-def show_stimulus_preview_inline(stimulus_type):
-    """Show a preview of the stimulus type"""
-    st.subheader("Stimulus Preview")
-    
-    try:
-        stimulus_manager = st.session_state.stimulus_manager
-        
-        if stimulus_type.startswith('visual') or stimulus_type in ['gabor', 'noise']:
-            # Generate two example visual stimuli
-            low_intensity = stimulus_manager.generate_visual_stimulus(stimulus_type, 0.3)
-            high_intensity = stimulus_manager.generate_visual_stimulus(stimulus_type, 0.7)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Lower Intensity**")
-                st.markdown(f'<img src="{low_intensity}" style="width: 150px; height: 150px; border: 1px solid #ccc;">', 
-                           unsafe_allow_html=True)
-            with col2:
-                st.markdown("**Higher Intensity**")
-                st.markdown(f'<img src="{high_intensity}" style="width: 150px; height: 150px; border: 1px solid #ccc;">', 
-                           unsafe_allow_html=True)
-                
-        elif stimulus_type.startswith('auditory'):
-            # Generate example audio stimuli
-            low_audio = stimulus_manager.generate_audio_stimulus(stimulus_type, 0.3, duration=1.0)
-            high_audio = stimulus_manager.generate_audio_stimulus(stimulus_type, 0.7, duration=1.0)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Lower Intensity**")
-                st.audio(low_audio, format='audio/wav')
-            with col2:
-                st.markdown("**Higher Intensity**")
-                st.audio(high_audio, format='audio/wav')
-                
-        elif stimulus_type.startswith('video') or stimulus_type == 'flicker':
-            # Generate example video stimuli
-            low_video = stimulus_manager.generate_video_stimulus(stimulus_type, 0.3, duration=1.5)
-            high_video = stimulus_manager.generate_video_stimulus(stimulus_type, 0.7, duration=1.5)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Lower Intensity**")
-                st.markdown(f'<img src="{low_video}" style="width: 150px; height: 150px; border: 1px solid #ccc;">', 
-                           unsafe_allow_html=True)
-            with col2:
-                st.markdown("**Higher Intensity**")
-                st.markdown(f'<img src="{high_video}" style="width: 150px; height: 150px; border: 1px solid #ccc;">', 
-                           unsafe_allow_html=True)
-        
-        st.caption("These are examples showing the difference you'll be asked to detect.")
-        
-    except Exception as e:
-        st.error(f"Unable to generate stimulus preview: {str(e)}")
-        st.info("Preview unavailable, but the experiment will work normally.")
-
 def instructions_screen():
     """Display detailed instructions before practice"""
     st.title("📋 Experiment Instructions")
