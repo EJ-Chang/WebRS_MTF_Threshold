@@ -344,6 +344,15 @@ class ExperimentManager:
         
         return summary
     
+    def is_experiment_complete(self) -> bool:
+        """
+        Check if the main experiment is complete.
+        
+        Returns:
+            True if all main experiment trials are finished
+        """
+        return self.current_trial >= self.num_trials
+    
     def get_all_data(self) -> Dict:
         """
         Get all experiment data including trials and summary
