@@ -2,7 +2,7 @@ import random
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional
-from ado_optimizer import ADOOptimizer
+from simple_ado import SimpleADO
 
 class ExperimentManager:
     """Manages the flow and logic of the 2AFC psychophysics experiment"""
@@ -38,13 +38,11 @@ class ExperimentManager:
         self.trial_data: List[Dict] = []
         self.practice_data: List[Dict] = []
         
-        # ADO optimizer for adaptive stimulus selection
+        # Simple ADO for adaptive stimulus selection
         if use_ado:
-            self.ado_optimizer = ADOOptimizer(
-                stimulus_range=(0.0, 1.0),
-                n_grid_points=30,  # Reduced for faster computation
-                prior_alpha=2.0,
-                prior_beta=2.0
+            self.ado_optimizer = SimpleADO(
+                initial_difference=0.2,
+                target_accuracy=0.75
             )
         else:
             self.ado_optimizer = None
@@ -147,7 +145,7 @@ class ExperimentManager:
 
     def _generate_ado_trial(self) -> Dict:
         """
-        Generate next trial using ADO optimization
+        Generate next trial using simplified ADO
         
         Returns:
             Trial dictionary with ADO-selected stimulus parameters
@@ -155,11 +153,8 @@ class ExperimentManager:
         if not self.ado_optimizer:
             raise ValueError("ADO optimizer not initialized")
         
-        # Get optimal stimulus difference from ADO (this should be the contrast difference)
-        optimal_difference = self.ado_optimizer.select_optimal_stimulus()
-        
-        # Ensure the difference is within reasonable bounds for visibility
-        optimal_difference = np.clip(optimal_difference, 0.05, 0.8)
+        # Get optimal stimulus difference from simplified ADO
+        optimal_difference = self.ado_optimizer.select_stimulus_difference()
         
         # Create stimuli with the optimal difference
         # Use a base intensity and add/subtract the difference
@@ -278,7 +273,7 @@ class ExperimentManager:
                                                     trial_result['stimulus_difference'])
                 
                 # Update ADO with stimulus and correctness
-                self.ado_optimizer.update_posterior(ado_stimulus_value, is_correct)
+                self.ado_optimizer.update_with_response(ado_stimulus_value, is_correct, trial_result['reaction_time'])
             
             self.trial_data.append(trial_result)
             self.current_trial += 1
@@ -337,14 +332,14 @@ class ExperimentManager:
         
         # Add ADO-specific information if ADO was used
         if self.use_ado and self.ado_optimizer:
-            ado_summary = self.ado_optimizer.get_trial_summary()
-            parameter_estimates = self.ado_optimizer.get_parameter_estimates()
+            ado_summary = self.ado_optimizer.get_performance_summary()
             
             summary['ado_info'] = {
-                'parameter_estimates': parameter_estimates,
-                'final_entropy': ado_summary.get('current_entropy', 0),
-                'stimuli_range': ado_summary.get('stimuli_range', (0, 1)),
-                'n_ado_trials': ado_summary.get('n_trials', 0)
+                'threshold_estimate': ado_summary.get('threshold_estimate', 0),
+                'current_difference': ado_summary.get('current_difference', 0),
+                'recent_accuracy': ado_summary.get('recent_accuracy', 0),
+                'n_ado_trials': ado_summary.get('n_trials', 0),
+                'converged': ado_summary.get('converged', False)
             }
         
         return summary
@@ -372,17 +367,24 @@ class ExperimentManager:
     def get_ado_parameter_estimates(self) -> Dict:
         """Get current ADO parameter estimates."""
         if self.use_ado and self.ado_optimizer:
-            return self.ado_optimizer.get_parameter_estimates()
+            summary = self.ado_optimizer.get_performance_summary()
+            return {
+                'threshold': summary.get('threshold_estimate', 0),
+                'current_difference': summary.get('current_difference', 0),
+                'recent_accuracy': summary.get('recent_accuracy', 0)
+            }
         return {}
     
     def get_ado_entropy(self) -> float:
-        """Get current ADO posterior entropy."""
+        """Get current ADO uncertainty measure."""
         if self.use_ado and self.ado_optimizer:
-            return self.ado_optimizer.get_entropy()
+            summary = self.ado_optimizer.get_performance_summary()
+            # Use difference variability as uncertainty measure
+            return summary.get('current_difference', 0) * 10  # Scale for display
         return 0.0
     
-    def predict_psychometric_curve(self, x_values: np.ndarray) -> np.ndarray:
-        """Predict psychometric curve based on current estimates."""
+    def get_ado_summary(self) -> Dict:
+        """Get ADO performance summary."""
         if self.use_ado and self.ado_optimizer:
-            return self.ado_optimizer.predict_psychometric_curve(x_values)
-        return np.zeros_like(x_values)
+            return self.ado_optimizer.get_performance_summary()
+        return {}

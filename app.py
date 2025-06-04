@@ -206,20 +206,19 @@ def experiment_screen():
         # Show ADO results if ADO was used
         if exp_manager.use_ado:
             st.subheader("ADO Results")
-            params = exp_manager.get_ado_parameter_estimates()
-            entropy = exp_manager.get_ado_entropy()
+            ado_summary = exp_manager.get_ado_summary()
             
-            if params:
+            if ado_summary:
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.write("**Psychometric Function Parameters:**")
-                    st.write(f"- Threshold (α): {params.get('alpha', 0):.3f}")
-                    st.write(f"- Slope (β): {params.get('beta', 0):.3f}")
+                    st.write("**Threshold Estimation:**")
+                    st.write(f"- Estimated Threshold: {ado_summary.get('threshold_estimate', 0):.3f}")
+                    st.write(f"- Final Accuracy: {ado_summary.get('recent_accuracy', 0):.1%}")
                 with col2:
-                    st.write("**Parameter Uncertainty:**")
-                    st.write(f"- Final Entropy: {entropy:.3f}")
-                    st.write(f"- Guess Rate (γ): {params.get('gamma', 0):.3f}")
-                    st.write(f"- Lapse Rate (λ): {params.get('lambda', 0):.3f}")
+                    st.write("**Algorithm Performance:**")
+                    st.write(f"- Trials Completed: {ado_summary.get('n_trials', 0)}")
+                    st.write(f"- Converged: {'Yes' if ado_summary.get('converged', False) else 'No'}")
+                    st.write(f"- Final Difference: {ado_summary.get('current_difference', 0):.3f}")
         
         # Save data
         if st.button("Download Results", type="primary"):
