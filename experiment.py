@@ -155,38 +155,38 @@ class ExperimentManager:
         if not self.ado_optimizer:
             raise ValueError("ADO optimizer not initialized")
         
-        # Get optimal stimulus value from ADO
-        optimal_stimulus = self.ado_optimizer.select_optimal_stimulus()
+        # Get optimal stimulus difference from ADO (this should be the contrast difference)
+        optimal_difference = self.ado_optimizer.select_optimal_stimulus()
         
-        # For 2AFC, we need to decide how to present the stimuli
-        # Option 1: Use optimal stimulus as the target, random as reference
-        # Option 2: Use optimal stimulus as difference between stimuli
+        # Ensure the difference is within reasonable bounds for visibility
+        optimal_difference = np.clip(optimal_difference, 0.05, 0.8)
         
-        # Using option 2: optimal_stimulus represents the stimulus difference
-        reference_intensity = 0.5  # Fixed reference
-        target_intensity = reference_intensity + optimal_stimulus
+        # Create stimuli with the optimal difference
+        # Use a base intensity and add/subtract the difference
+        base_intensity = 0.4  # Lower base to allow for bigger differences
         
-        # Ensure target is within valid range
-        target_intensity = np.clip(target_intensity, 0.0, 1.0)
-        
-        # Randomly assign which side gets the target
+        # Randomly assign which stimulus is brighter
         if random.random() < 0.5:
-            left_stimulus = target_intensity
-            right_stimulus = reference_intensity
+            left_stimulus = base_intensity + optimal_difference
+            right_stimulus = base_intensity
             correct_response = 'left'
         else:
-            left_stimulus = reference_intensity
-            right_stimulus = target_intensity
+            left_stimulus = base_intensity
+            right_stimulus = base_intensity + optimal_difference
             correct_response = 'right'
+        
+        # Ensure stimuli are within valid range [0, 1]
+        left_stimulus = np.clip(left_stimulus, 0.0, 1.0)
+        right_stimulus = np.clip(right_stimulus, 0.0, 1.0)
         
         trial = {
             'trial_number': self.current_trial + 1,
-            'left_stimulus': round(left_stimulus, 3),
-            'right_stimulus': round(right_stimulus, 3),
+            'left_stimulus': round(float(left_stimulus), 3),
+            'right_stimulus': round(float(right_stimulus), 3),
             'correct_response': correct_response,
-            'stimulus_difference': abs(left_stimulus - right_stimulus),
-            'ado_stimulus_value': optimal_stimulus,
-            'reference_intensity': reference_intensity,
+            'stimulus_difference': round(abs(left_stimulus - right_stimulus), 3),
+            'ado_stimulus_value': round(optimal_difference, 3),
+            'base_intensity': base_intensity,
             'is_practice': False
         }
         

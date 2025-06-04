@@ -38,11 +38,11 @@ class ADOOptimizer:
         # Using 4-parameter Weibull: P(x) = gamma + (1-gamma-lambda) * (1 - exp(-(x/alpha)^beta))
         self.parameter_names = ['alpha', 'beta', 'gamma', 'lambda']
         
-        # Set up parameter grids for Bayesian inference (optimized for speed)
-        self.alpha_grid = np.linspace(0.1, 0.9, n_grid_points)  # threshold
-        self.beta_grid = np.linspace(0.5, 5.0, n_grid_points)   # slope
-        self.gamma_grid = np.linspace(0.0, 0.1, 10)             # guess rate (reduced)
-        self.lambda_grid = np.linspace(0.0, 0.1, 10)            # lapse rate (reduced)
+        # Set up parameter grids for Bayesian inference (optimized for psychophysics)
+        self.alpha_grid = np.linspace(0.05, 0.6, n_grid_points)  # threshold (contrast difference)
+        self.beta_grid = np.linspace(1.0, 8.0, n_grid_points)    # slope (steepness)
+        self.gamma_grid = np.linspace(0.0, 0.1, 8)               # guess rate
+        self.lambda_grid = np.linspace(0.0, 0.1, 8)              # lapse rate
         
         # Initialize prior distribution
         self.prior_alpha = prior_alpha
@@ -239,10 +239,10 @@ class ADOOptimizer:
             # Reduced number of candidates for faster computation
             candidate_stimuli = np.linspace(self.stimulus_range[0], self.stimulus_range[1], 15)
         
-        # Fast heuristic for first few trials - use predefined good stimuli
-        if len(self.trial_history) < 3:
-            good_stimuli = [0.2, 0.5, 0.8]
-            return good_stimuli[len(self.trial_history)]
+        # Start with well-spaced stimuli for initial estimation
+        if len(self.trial_history) < 5:
+            initial_stimuli = [0.1, 0.3, 0.15, 0.4, 0.25]
+            return initial_stimuli[len(self.trial_history)]
         
         # Calculate information gain for each candidate
         information_gains = np.zeros(len(candidate_stimuli))

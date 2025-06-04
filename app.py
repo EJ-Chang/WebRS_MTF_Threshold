@@ -253,16 +253,27 @@ def experiment_screen():
     
     # Show real-time ADO parameter estimates during experiment
     if exp_manager.use_ado and exp_manager.current_trial > 0:
-        with st.expander("Current ADO Estimates", expanded=False):
+        with st.expander("ADO Algorithm Status", expanded=False):
             params = exp_manager.get_ado_parameter_estimates()
-            if params:
+            if params and exp_manager.ado_optimizer:
                 col1, col2 = st.columns(2)
                 with col1:
+                    st.write("**Parameter Estimates:**")
                     st.write(f"Threshold: {params.get('alpha', 0):.3f}")
                     st.write(f"Slope: {params.get('beta', 0):.3f}")
                 with col2:
-                    st.write(f"Guess Rate: {params.get('gamma', 0):.3f}")
-                    st.write(f"Lapse Rate: {params.get('lambda', 0):.3f}")
+                    st.write("**Algorithm Status:**")
+                    n_trials = len(exp_manager.ado_optimizer.trial_history)
+                    if n_trials > 0:
+                        recent_responses = exp_manager.ado_optimizer.response_history[-5:]
+                        accuracy = sum(recent_responses) / len(recent_responses) if recent_responses else 0
+                        st.write(f"Trials completed: {n_trials}")
+                        st.write(f"Recent accuracy: {accuracy:.1%}")
+                        
+                        # Show last few stimulus values
+                        if len(exp_manager.ado_optimizer.trial_history) >= 3:
+                            recent_stimuli = exp_manager.ado_optimizer.trial_history[-3:]
+                            st.write(f"Recent stimuli: {[f'{s:.3f}' for s in recent_stimuli]}")
     
     # Run trial
     run_trial(is_practice=False)
@@ -289,7 +300,8 @@ def run_trial(is_practice=False):
         current_trial = st.session_state.current_trial_data
     
     # Display stimuli
-    st.subheader("Choose the stimulus that appears more intense:")
+    st.subheader("Choose the stimulus that appears BRIGHTER:")
+    st.caption("Select the circle that has higher brightness/luminance")
     
     # Create stimulus display
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -300,31 +312,43 @@ def run_trial(is_practice=False):
         
         with stim_col1:
             st.markdown("### Left Stimulus")
-            # Display stimulus (using circles with different intensities as example)
+            # Display stimulus with better contrast visibility
             left_intensity = current_trial['left_stimulus']
+            # Convert to grayscale value (0=black, 255=white)
+            gray_value = int(left_intensity * 255)
             st.markdown(f"""
             <div style="
                 width: 150px; 
                 height: 150px; 
                 border-radius: 50%; 
-                background-color: rgba(0,0,0,{left_intensity}); 
+                background-color: rgb({gray_value}, {gray_value}, {gray_value}); 
                 margin: 20px auto;
-                border: 2px solid #ccc;
+                border: 3px solid #333;
+                box-shadow: 0 0 10px rgba(0,0,0,0.3);
             "></div>
+            <p style="text-align: center; font-size: 12px; color: #666;">
+                Brightness: {left_intensity:.3f}
+            </p>
             """, unsafe_allow_html=True)
         
         with stim_col2:
             st.markdown("### Right Stimulus")
             right_intensity = current_trial['right_stimulus']
+            # Convert to grayscale value (0=black, 255=white)
+            gray_value = int(right_intensity * 255)
             st.markdown(f"""
             <div style="
                 width: 150px; 
                 height: 150px; 
                 border-radius: 50%; 
-                background-color: rgba(0,0,0,{right_intensity}); 
+                background-color: rgb({gray_value}, {gray_value}, {gray_value}); 
                 margin: 20px auto;
-                border: 2px solid #ccc;
+                border: 3px solid #333;
+                box-shadow: 0 0 10px rgba(0,0,0,0.3);
             "></div>
+            <p style="text-align: center; font-size: 12px; color: #666;">
+                Brightness: {right_intensity:.3f}
+            </p>
             """, unsafe_allow_html=True)
     
     # Record trial start time if not already recorded
