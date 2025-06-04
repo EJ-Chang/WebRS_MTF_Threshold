@@ -5,6 +5,8 @@ import time
 import random
 from datetime import datetime
 import json
+import plotly.graph_objects as go
+import plotly.express as px
 from experiment import ExperimentManager
 from data_manager import DataManager
 
@@ -202,6 +204,10 @@ def experiment_screen():
                 st.metric("Average RT", f"{avg_rt:.2f}s")
             with col3:
                 st.metric("Accuracy", f"{accuracy:.1%}")
+        
+        # Generate and display psychometric function
+        st.subheader("Your Psychometric Function")
+        plot_psychometric_function(exp_manager.trial_data)
         
         # Show ADO results if ADO was used
         if exp_manager.use_ado:
