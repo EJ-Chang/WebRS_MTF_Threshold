@@ -556,7 +556,7 @@ def record_response(response, trial_data, is_practice=False):
         st.write(f"Left brightness: {left_val:.3f}, Right brightness: {right_val:.3f}")
     
     # Check if experiment is complete
-    if not is_practice and exp_manager.is_experiment_complete():
+    if not is_practice and hasattr(exp_manager, 'current_trial') and exp_manager.current_trial >= exp_manager.num_trials:
         st.session_state.experiment_stage = 'completed'
         time.sleep(1)  # Brief delay before showing results
         st.rerun()
