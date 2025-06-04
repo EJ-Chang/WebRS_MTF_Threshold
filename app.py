@@ -109,17 +109,17 @@ def instructions_screen():
     
     st.header("Task Description")
     st.write("""
-    In this experiment, you will see two stimuli presented side by side. Your task is to:
+    In this experiment, you will see two circles presented side by side. Your task is to:
     
-    1. **Look at both stimuli carefully**
-    2. **Choose which one appears brighter/more intense** (or according to the specific criterion)
+    1. **Look at both circles carefully**
+    2. **Choose which circle appears brighter** (has more light/luminance)
     3. **Respond as quickly and accurately as possible**
     """)
     
     st.header("How to Respond")
     st.write("""
-    - Click the **Left** button to choose the left stimulus
-    - Click the **Right** button to choose the right stimulus
+    - Click the **Left** button to choose the left circle (if it's brighter)
+    - Click the **Right** button to choose the right circle (if it's brighter)
     - Or use keyboard shortcuts: **'A'** for left, **'L'** for right
     """)
     
@@ -300,8 +300,8 @@ def run_trial(is_practice=False):
         current_trial = st.session_state.current_trial_data
     
     # Display stimuli
-    st.subheader("Choose the stimulus that appears BRIGHTER:")
-    st.caption("Select the circle that has higher brightness/luminance")
+    st.subheader("Which one is brighter?")
+    st.caption("Click the button below the brighter circle")
     
     # Create stimulus display
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -364,11 +364,11 @@ def run_trial(is_practice=False):
         button_col1, button_col2 = st.columns(2)
         
         with button_col1:
-            if st.button("← Left (A)", key="left_button", use_container_width=True):
+            if st.button("Left is Brighter", key="left_button", use_container_width=True):
                 record_response("left", current_trial, is_practice)
         
         with button_col2:
-            if st.button("Right (L) →", key="right_button", use_container_width=True):
+            if st.button("Right is Brighter", key="right_button", use_container_width=True):
                 record_response("right", current_trial, is_practice)
     
     # Keyboard shortcuts info
