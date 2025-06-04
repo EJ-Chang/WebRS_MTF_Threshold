@@ -390,6 +390,113 @@ def run_trial(is_practice=False):
     else:
         st.session_state.show_debug = False
 
+def plot_psychometric_function(trial_data):
+    """Generate and display psychometric function from participant data"""
+    if not trial_data:
+        st.warning("No trial data available for plotting")
+        return
+    
+    # Convert to DataFrame for easier manipulation
+    df = pd.DataFrame(trial_data)
+    
+    # Group by stimulus difference and calculate accuracy
+    grouped = df.groupby('stimulus_difference').agg({
+        'is_correct': ['count', 'sum', 'mean'],
+        'reaction_time': 'mean'
+    }).round(3)
+    
+    # Flatten column names
+    grouped.columns = ['n_trials', 'n_correct', 'accuracy', 'mean_rt']
+    grouped = grouped.reset_index()
+    
+    # Filter out groups with very few trials (less than 2)
+    grouped = grouped[grouped['n_trials'] >= 2]
+    
+    if len(grouped) == 0:
+        st.warning("Not enough data points for psychometric function")
+        return
+    
+    # Create the plot
+    fig = go.Figure()
+    
+    # Add data points
+    fig.add_trace(go.Scatter(
+        x=grouped['stimulus_difference'],
+        y=grouped['accuracy'],
+        mode='markers+lines',
+        marker=dict(
+            size=grouped['n_trials'] * 3,  # Size represents number of trials
+            color=grouped['mean_rt'],
+            colorscale='Viridis',
+            showscale=True,
+            colorbar=dict(title="Mean RT (s)")
+        ),
+        line=dict(width=2),
+        name='Observed Accuracy',
+        hovertemplate=
+        'Stimulus Difference: %{x:.3f}<br>' +
+        'Accuracy: %{y:.1%}<br>' +
+        'Trials: %{text}<br>' +
+        'Mean RT: %{marker.color:.2f}s<extra></extra>',
+        text=grouped['n_trials']
+    ))
+    
+    # Add threshold line (75% correct)
+    fig.add_hline(
+        y=0.75, 
+        line_dash="dash", 
+        line_color="red",
+        annotation_text="75% Threshold"
+    )
+    
+    # Estimate threshold (interpolation to 75% point)
+    if len(grouped) >= 2:
+        # Find threshold by interpolation
+        try:
+            threshold_estimate = np.interp(0.75, grouped['accuracy'], grouped['stimulus_difference'])
+            fig.add_vline(
+                x=threshold_estimate,
+                line_dash="dash",
+                line_color="orange",
+                annotation_text=f"Est. Threshold: {threshold_estimate:.3f}"
+            )
+        except:
+            pass
+    
+    # Update layout
+    fig.update_layout(
+        title="Psychometric Function - Brightness Discrimination",
+        xaxis_title="Stimulus Difference (Brightness)",
+        yaxis_title="Proportion Correct",
+        yaxis=dict(range=[0, 1], tickformat='.0%'),
+        width=700,
+        height=500,
+        showlegend=True
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Show data table
+    with st.expander("Detailed Results by Stimulus Difference"):
+        st.dataframe(grouped, use_container_width=True)
+    
+    # Summary statistics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Trials", len(df))
+    with col2:
+        overall_accuracy = df['is_correct'].mean()
+        st.metric("Overall Accuracy", f"{overall_accuracy:.1%}")
+    with col3:
+        if len(grouped) >= 2:
+            try:
+                threshold_est = np.interp(0.75, grouped['accuracy'], grouped['stimulus_difference'])
+                st.metric("75% Threshold", f"{threshold_est:.3f}")
+            except:
+                st.metric("75% Threshold", "N/A")
+        else:
+            st.metric("75% Threshold", "N/A")
+
 def record_response(response, trial_data, is_practice=False):
     """Record participant response and reaction time"""
     if st.session_state.trial_start_time is None:
