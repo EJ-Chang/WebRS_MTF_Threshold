@@ -253,26 +253,18 @@ def experiment_screen():
     # Show real-time ADO parameter estimates during experiment
     if exp_manager.use_ado and exp_manager.current_trial > 0:
         with st.expander("ADO Algorithm Status", expanded=False):
-            params = exp_manager.get_ado_parameter_estimates()
-            if params and exp_manager.ado_optimizer:
+            ado_summary = exp_manager.get_ado_summary()
+            if ado_summary:
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.write("**Parameter Estimates:**")
-                    st.write(f"Threshold: {params.get('alpha', 0):.3f}")
-                    st.write(f"Slope: {params.get('beta', 0):.3f}")
+                    st.write("**Current Estimates:**")
+                    st.write(f"Threshold: {ado_summary.get('threshold_estimate', 0):.3f}")
+                    st.write(f"Current Difference: {ado_summary.get('current_difference', 0):.3f}")
                 with col2:
-                    st.write("**Algorithm Status:**")
-                    n_trials = len(exp_manager.ado_optimizer.trial_history)
-                    if n_trials > 0:
-                        recent_responses = exp_manager.ado_optimizer.response_history[-5:]
-                        accuracy = sum(recent_responses) / len(recent_responses) if recent_responses else 0
-                        st.write(f"Trials completed: {n_trials}")
-                        st.write(f"Recent accuracy: {accuracy:.1%}")
-                        
-                        # Show last few stimulus values
-                        if len(exp_manager.ado_optimizer.trial_history) >= 3:
-                            recent_stimuli = exp_manager.ado_optimizer.trial_history[-3:]
-                            st.write(f"Recent stimuli: {[f'{s:.3f}' for s in recent_stimuli]}")
+                    st.write("**Performance:**")
+                    st.write(f"Trials: {ado_summary.get('n_trials', 0)}")
+                    st.write(f"Recent Accuracy: {ado_summary.get('recent_accuracy', 0):.1%}")
+                    st.write(f"Converged: {'Yes' if ado_summary.get('converged', False) else 'No'}")
     
     # Run trial
     run_trial(is_practice=False)
