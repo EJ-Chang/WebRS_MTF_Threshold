@@ -7,6 +7,7 @@ from datetime import datetime
 import json
 from experiment import ExperimentManager
 from data_manager import DataManager
+from psychometric_analysis import PsychometricAnalyzer
 
 # Configure page
 st.set_page_config(
@@ -25,6 +26,8 @@ if 'experiment_manager' not in st.session_state:
     st.session_state.experiment_manager = None
 if 'data_manager' not in st.session_state:
     st.session_state.data_manager = DataManager()
+if 'psychometric_analyzer' not in st.session_state:
+    st.session_state.psychometric_analyzer = PsychometricAnalyzer()
 if 'trial_start_time' not in st.session_state:
     st.session_state.trial_start_time = None
 if 'awaiting_response' not in st.session_state:
@@ -384,6 +387,128 @@ def run_trial(is_practice=False):
     else:
         st.session_state.show_debug = False
 
+def completion_screen():
+    """Display experiment completion with psychometric function analysis"""
+    st.title("🎉 Experiment Complete!")
+    st.success("Thank you for participating in this psychophysics experiment!")
+    
+    exp_manager = st.session_state.experiment_manager
+    analyzer = st.session_state.psychometric_analyzer
+    
+    # Get experiment data
+    all_data = exp_manager.get_all_data()
+    trial_data = all_data.get('main_trials', [])
+    
+    if not trial_data:
+        st.error("No trial data available for analysis.")
+        return
+    
+    # Display basic statistics
+    st.subheader("📊 Experiment Summary")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total Trials", len(trial_data))
+    
+    with col2:
+        correct_trials = sum(1 for trial in trial_data if trial.get('is_correct', False))
+        accuracy = correct_trials / len(trial_data) if trial_data else 0
+        st.metric("Overall Accuracy", f"{accuracy:.1%}")
+    
+    with col3:
+        avg_rt = np.mean([trial.get('reaction_time', 0) for trial in trial_data])
+        st.metric("Average RT", f"{avg_rt:.2f}s")
+    
+    # Calculate and display psychometric function
+    st.subheader("📈 Your Psychometric Function")
+    st.write("This shows how your accuracy changes with stimulus difficulty:")
+    
+    try:
+        # Calculate psychometric data
+        psych_data = analyzer.calculate_psychometric_data(trial_data)
+        
+        if not psych_data or 'grouped_data' not in psych_data:
+            st.error("Insufficient data for psychometric analysis.")
+            return
+        
+        # Fit psychometric function
+        fit_results = analyzer.fit_psychometric_function(psych_data['grouped_data'])
+        
+        # Display interactive plot
+        if 'error' not in fit_results:
+            fig = analyzer.create_psychometric_plot(psych_data, fit_results)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Display analysis summary
+            st.subheader("📋 Analysis Results")
+            summary = analyzer.generate_analysis_summary(psych_data, fit_results)
+            st.text(summary)
+            
+            # Display threshold information prominently
+            if 'thresholds' in fit_results:
+                st.subheader("🎯 Your Discrimination Threshold")
+                threshold_75 = fit_results['thresholds']['threshold_75']
+                st.info(f"**75% Threshold: {threshold_75:.4f}**\n\nThis is the stimulus difference you need to achieve 75% accuracy in brightness discrimination.")
+        
+        else:
+            st.error(f"Could not fit psychometric function: {fit_results['error']}")
+            
+            # Show raw data instead
+            st.subheader("📊 Raw Data Summary")
+            grouped_data = psych_data['grouped_data']
+            st.dataframe(grouped_data)
+    
+    except Exception as e:
+        st.error(f"Error analyzing psychometric function: {str(e)}")
+        
+        # Show basic trial summary as fallback
+        st.subheader("📊 Trial Summary")
+        trial_summary = []
+        for trial in trial_data:
+            trial_summary.append({
+                'Trial': trial.get('trial_number', 'Unknown'),
+                'Stimulus Difference': trial.get('stimulus_difference', 0),
+                'Correct': trial.get('is_correct', False),
+                'Reaction Time': trial.get('reaction_time', 0)
+            })
+        
+        df = pd.DataFrame(trial_summary)
+        st.dataframe(df)
+    
+    # Data export options
+    st.subheader("💾 Download Your Data")
+    data_manager = st.session_state.data_manager
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # CSV export
+        csv_data = data_manager.export_to_csv(trial_data, st.session_state.participant_id)
+        st.download_button(
+            label="📄 Download CSV",
+            data=csv_data,
+            file_name=f"psychophysics_data_{st.session_state.participant_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+    
+    with col2:
+        # JSON export
+        json_data = data_manager.export_to_json(all_data)
+        st.download_button(
+            label="📋 Download JSON",
+            data=json_data,
+            file_name=f"psychophysics_data_{st.session_state.participant_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
+        )
+    
+    # Option to start new experiment
+    st.markdown("---")
+    if st.button("🔄 Start New Experiment", type="primary"):
+        # Reset all session state
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
 def record_response(response, trial_data, is_practice=False):
     """Record participant response and reaction time"""
     if st.session_state.trial_start_time is None:
@@ -430,9 +555,15 @@ def record_response(response, trial_data, is_practice=False):
         st.error(f"✗ Your response: {response.upper()}, Correct: {expected_correct.upper()} (RT: {reaction_time:.2f}s)")
         st.write(f"Left brightness: {left_val:.3f}, Right brightness: {right_val:.3f}")
     
-    # Auto-advance after brief delay
-    time.sleep(exp_manager.inter_trial_interval)
-    st.rerun()
+    # Check if experiment is complete
+    if not is_practice and exp_manager.is_experiment_complete():
+        st.session_state.experiment_stage = 'completed'
+        time.sleep(1)  # Brief delay before showing results
+        st.rerun()
+    else:
+        # Auto-advance after brief delay
+        time.sleep(exp_manager.inter_trial_interval)
+        st.rerun()
 
 # Main app logic
 def main():
@@ -447,6 +578,8 @@ def main():
         practice_screen()
     elif st.session_state.experiment_stage == 'experiment':
         experiment_screen()
+    elif st.session_state.experiment_stage == 'completed':
+        completion_screen()
     
     # Add footer
     st.markdown("---")
