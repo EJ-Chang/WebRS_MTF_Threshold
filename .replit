@@ -1,8 +1,8 @@
-modules = ["python-3.11"]
+modules = ["python-3.11", "python3"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["glibcLocales"]
+packages = ["SDL2", "SDL2_image", "SDL2_mixer", "SDL2_ttf", "ffmpeg-full", "fontconfig", "freetype", "glibcLocales", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libpng", "libsndfile", "libtiff", "libwebp", "libxcrypt", "openjpeg", "pkg-config", "portmidi", "tcl", "tk", "zlib"]
 
 [deployment]
 deploymentTarget = "autoscale"

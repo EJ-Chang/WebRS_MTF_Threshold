@@ -5,8 +5,10 @@ import time
 import random
 from datetime import datetime
 import json
+import base64
 from experiment import ExperimentManager
 from data_manager import DataManager
+from stimulus_manager import StimulusManager
 
 # Configure page
 st.set_page_config(
@@ -25,6 +27,8 @@ if 'experiment_manager' not in st.session_state:
     st.session_state.experiment_manager = None
 if 'data_manager' not in st.session_state:
     st.session_state.data_manager = DataManager()
+if 'stimulus_manager' not in st.session_state:
+    st.session_state.stimulus_manager = StimulusManager()
 if 'trial_start_time' not in st.session_state:
     st.session_state.trial_start_time = None
 if 'awaiting_response' not in st.session_state:
@@ -60,6 +64,52 @@ def welcome_screen():
     
     # Experiment configuration
     st.subheader("Experiment Configuration")
+    
+    # Stimulus type selection
+    available_stimuli = st.session_state.stimulus_manager.get_available_stimulus_types()
+    
+    stimulus_categories = {
+        'Visual Stimuli': {
+            'visual_intensity': 'Brightness/Contrast',
+            'visual_size': 'Size Comparison',
+            'visual_color': 'Color Hue',
+            'gabor': 'Gabor Patches',
+            'noise': 'Visual Noise'
+        },
+        'Auditory Stimuli': {
+            'auditory_pitch': 'Pitch/Frequency',
+            'auditory_volume': 'Volume/Loudness',
+            'noise': 'Audio Noise'
+        },
+        'Video Stimuli': {
+            'video_speed': 'Motion Speed',
+            'flicker': 'Flicker Rate'
+        }
+    }
+    
+    st.subheader("Stimulus Type")
+    selected_category = st.selectbox("Choose stimulus category:", list(stimulus_categories.keys()))
+    stimulus_type = st.selectbox(
+        "Select specific stimulus type:", 
+        list(stimulus_categories[selected_category].keys()),
+        format_func=lambda x: stimulus_categories[selected_category][x]
+    )
+    
+    # Show description of selected stimulus type
+    descriptions = {
+        'visual_intensity': 'Compare circles with different brightness levels',
+        'visual_size': 'Compare circles of different sizes',
+        'visual_color': 'Compare circles with different color hues',
+        'gabor': 'Compare Gabor patches with different spatial frequencies',
+        'noise': 'Compare visual noise patterns with different intensities',
+        'auditory_pitch': 'Compare tones with different pitch/frequency',
+        'auditory_volume': 'Compare tones with different volume levels',
+        'noise': 'Compare white noise with different intensity levels',
+        'video_speed': 'Compare moving objects with different speeds',
+        'flicker': 'Compare flickering objects with different rates'
+    }
+    
+    st.info(f"**Task**: {descriptions.get(stimulus_type, 'Compare stimuli and choose the more intense one')}")
     
     col1, col2 = st.columns(2)
     with col1:
