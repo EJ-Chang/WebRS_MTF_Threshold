@@ -70,6 +70,17 @@ def welcome_screen():
         inter_trial_interval = st.slider("Inter-trial interval (seconds):", 0.5, 3.0, 1.0, 0.1)
         num_practice_trials = st.slider("Practice trials:", 3, 10, 5)
     
+    # ADO configuration
+    st.subheader("Adaptive Design Optimization (ADO)")
+    use_ado = st.checkbox(
+        "Enable ADO for optimal stimulus selection", 
+        value=True,
+        help="ADO adaptively selects stimuli to maximize information gain about the psychometric function"
+    )
+    
+    if use_ado:
+        st.info("🧠 ADO will intelligently select stimuli to efficiently estimate your psychometric function parameters")
+    
     # Start experiment button
     if st.button("Start Experiment", type="primary"):
         if participant_id.strip():
@@ -79,7 +90,8 @@ def welcome_screen():
                 num_practice_trials=num_practice_trials,
                 stimulus_duration=stimulus_duration,
                 inter_trial_interval=inter_trial_interval,
-                participant_id=st.session_state.participant_id
+                participant_id=st.session_state.participant_id,
+                use_ado=use_ado
             )
             st.session_state.experiment_stage = 'instructions'
             st.rerun()
@@ -169,8 +181,33 @@ def experiment_screen():
         total_trials = len(exp_manager.trial_data)
         if total_trials > 0:
             avg_rt = np.mean([trial['reaction_time'] for trial in exp_manager.trial_data])
-            st.write(f"**Total trials completed:** {total_trials}")
-            st.write(f"**Average reaction time:** {avg_rt:.2f} seconds")
+            accuracy = np.mean([trial.get('is_correct', False) for trial in exp_manager.trial_data])
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Trials", total_trials)
+            with col2:
+                st.metric("Average RT", f"{avg_rt:.2f}s")
+            with col3:
+                st.metric("Accuracy", f"{accuracy:.1%}")
+        
+        # Show ADO results if ADO was used
+        if exp_manager.use_ado:
+            st.subheader("ADO Results")
+            params = exp_manager.get_ado_parameter_estimates()
+            entropy = exp_manager.get_ado_entropy()
+            
+            if params:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Psychometric Function Parameters:**")
+                    st.write(f"- Threshold (α): {params.get('alpha', 0):.3f}")
+                    st.write(f"- Slope (β): {params.get('beta', 0):.3f}")
+                with col2:
+                    st.write("**Parameter Uncertainty:**")
+                    st.write(f"- Final Entropy: {entropy:.3f}")
+                    st.write(f"- Guess Rate (γ): {params.get('gamma', 0):.3f}")
+                    st.write(f"- Lapse Rate (λ): {params.get('lambda', 0):.3f}")
         
         # Save data
         if st.button("Download Results", type="primary"):
@@ -192,7 +229,28 @@ def experiment_screen():
     # Display experiment progress
     progress = exp_manager.current_trial / exp_manager.num_trials
     st.progress(progress)
-    st.write(f"Trial {exp_manager.current_trial + 1} of {exp_manager.num_trials}")
+    
+    # Show trial info and ADO status
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.write(f"Trial {exp_manager.current_trial + 1} of {exp_manager.num_trials}")
+    with col2:
+        if exp_manager.use_ado:
+            entropy = exp_manager.get_ado_entropy()
+            st.write(f"ADO Uncertainty: {entropy:.2f}")
+    
+    # Show real-time ADO parameter estimates during experiment
+    if exp_manager.use_ado and exp_manager.current_trial > 0:
+        with st.expander("Current ADO Estimates", expanded=False):
+            params = exp_manager.get_ado_parameter_estimates()
+            if params:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"Threshold: {params.get('alpha', 0):.3f}")
+                    st.write(f"Slope: {params.get('beta', 0):.3f}")
+                with col2:
+                    st.write(f"Guess Rate: {params.get('gamma', 0):.3f}")
+                    st.write(f"Lapse Rate: {params.get('lambda', 0):.3f}")
     
     # Run trial
     run_trial(is_practice=False)

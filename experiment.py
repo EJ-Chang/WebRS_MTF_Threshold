@@ -368,3 +368,21 @@ class ExperimentManager:
             'trial_data': self.trial_data,
             'summary': self.get_experiment_summary()
         }
+    
+    def get_ado_parameter_estimates(self) -> Dict:
+        """Get current ADO parameter estimates."""
+        if self.use_ado and self.ado_optimizer:
+            return self.ado_optimizer.get_parameter_estimates()
+        return {}
+    
+    def get_ado_entropy(self) -> float:
+        """Get current ADO posterior entropy."""
+        if self.use_ado and self.ado_optimizer:
+            return self.ado_optimizer.get_entropy()
+        return 0.0
+    
+    def predict_psychometric_curve(self, x_values: np.ndarray) -> np.ndarray:
+        """Predict psychometric curve based on current estimates."""
+        if self.use_ado and self.ado_optimizer:
+            return self.ado_optimizer.predict_psychometric_curve(x_values)
+        return np.zeros_like(x_values)

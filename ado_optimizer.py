@@ -38,11 +38,11 @@ class ADOOptimizer:
         # Using 4-parameter Weibull: P(x) = gamma + (1-gamma-lambda) * (1 - exp(-(x/alpha)^beta))
         self.parameter_names = ['alpha', 'beta', 'gamma', 'lambda']
         
-        # Set up parameter grids for Bayesian inference
+        # Set up parameter grids for Bayesian inference (optimized for speed)
         self.alpha_grid = np.linspace(0.1, 0.9, n_grid_points)  # threshold
         self.beta_grid = np.linspace(0.5, 5.0, n_grid_points)   # slope
-        self.gamma_grid = np.linspace(0.0, 0.1, 20)             # guess rate
-        self.lambda_grid = np.linspace(0.0, 0.1, 20)            # lapse rate
+        self.gamma_grid = np.linspace(0.0, 0.1, 10)             # guess rate (reduced)
+        self.lambda_grid = np.linspace(0.0, 0.1, 10)            # lapse rate (reduced)
         
         # Initialize prior distribution
         self.prior_alpha = prior_alpha
