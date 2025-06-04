@@ -210,6 +210,74 @@ def welcome_screen():
             st.rerun()
         else:
             st.error("Please enter a valid Participant ID")
+    
+    st.markdown("---")
+    
+    # Data analysis section
+    st.subheader("📊 Analyze Previous Data")
+    st.markdown("Upload CSV data from a previous experiment to visualize the psychometric function:")
+    
+    uploaded_file = st.file_uploader(
+        "Choose CSV file", 
+        type=['csv'],
+        help="Upload a CSV file from a previous experiment to analyze"
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # Read the uploaded CSV
+            df = pd.read_csv(uploaded_file)
+            
+            # Display basic info about the dataset
+            st.success(f"Data loaded successfully! Found {len(df)} trials.")
+            
+            # Show a preview of the data
+            with st.expander("Data Preview"):
+                st.dataframe(df.head(10))
+                
+                # Show column info
+                st.write("**Columns found:**", list(df.columns))
+                st.write("**Data types:**")
+                for col in df.columns:
+                    st.write(f"- {col}: {df[col].dtype}")
+            
+            # Convert DataFrame back to trial data format for plotting
+            trial_data = df.to_dict('records')
+            
+            # Generate psychometric function
+            st.subheader("Psychometric Function from Uploaded Data")
+            plot_psychometric_function(trial_data)
+            
+            # Show summary statistics
+            if 'is_correct' in df.columns:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Trials", len(df))
+                with col2:
+                    accuracy = df['is_correct'].mean()
+                    st.metric("Overall Accuracy", f"{accuracy:.1%}")
+                with col3:
+                    if 'reaction_time' in df.columns:
+                        avg_rt = df['reaction_time'].mean()
+                        st.metric("Average RT", f"{avg_rt:.2f}s")
+            
+        except Exception as e:
+            st.error(f"Error reading file: {str(e)}")
+            st.info("Please make sure the CSV file has the correct format with columns like 'stimulus_difference', 'is_correct', 'reaction_time', etc.")
+            
+            # Show expected format
+            with st.expander("Expected CSV Format"):
+                sample_data = {
+                    'trial_number': [1, 2, 3],
+                    'stimulus_difference': [0.1, 0.2, 0.15],
+                    'is_correct': [True, False, True],
+                    'reaction_time': [1.2, 1.5, 1.1],
+                    'left_stimulus': [0.4, 0.4, 0.4],
+                    'right_stimulus': [0.5, 0.6, 0.55],
+                    'response': ['right', 'left', 'right']
+                }
+                sample_df = pd.DataFrame(sample_data)
+                st.dataframe(sample_df)
 
 def instructions_screen():
     """Display detailed instructions before practice"""
