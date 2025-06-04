@@ -29,6 +29,10 @@ if 'trial_start_time' not in st.session_state:
     st.session_state.trial_start_time = None
 if 'awaiting_response' not in st.session_state:
     st.session_state.awaiting_response = False
+if 'current_trial_data' not in st.session_state:
+    st.session_state.current_trial_data = None
+if 'trial_locked' not in st.session_state:
+    st.session_state.trial_locked = False
 
 def welcome_screen():
     """Display welcome screen and collect participant information"""
@@ -139,6 +143,10 @@ def instructions_screen():
         if st.button("Start Practice Trials →", type="primary"):
             st.session_state.experiment_stage = 'practice'
             st.session_state.experiment_manager.start_practice()
+            # Reset trial state for new session
+            st.session_state.trial_locked = False
+            st.session_state.current_trial_data = None
+            st.session_state.awaiting_response = False
             st.rerun()
 
 def practice_screen():
@@ -155,6 +163,10 @@ def practice_screen():
         if st.button("Start Main Experiment →", type="primary"):
             st.session_state.experiment_stage = 'experiment'
             exp_manager.start_main_experiment()
+            # Reset trial state for new session
+            st.session_state.trial_locked = False
+            st.session_state.current_trial_data = None
+            st.session_state.awaiting_response = False
             st.rerun()
         return
     
@@ -259,12 +271,22 @@ def run_trial(is_practice=False):
     """Run a single trial"""
     exp_manager = st.session_state.experiment_manager
     
-    # Get current trial data
-    current_trial = exp_manager.get_current_trial(is_practice)
-    
-    if current_trial is None:
-        st.error("Error loading trial data")
-        return
+    # Check if we need to generate a new trial or use the locked one
+    if not st.session_state.trial_locked or st.session_state.current_trial_data is None:
+        # Get new trial data and lock it
+        current_trial = exp_manager.get_current_trial(is_practice)
+        
+        if current_trial is None:
+            st.error("Error loading trial data")
+            return
+        
+        # Lock the trial data to prevent regeneration
+        st.session_state.current_trial_data = current_trial.copy()
+        st.session_state.trial_locked = True
+        st.session_state.awaiting_response = False
+    else:
+        # Use the locked trial data
+        current_trial = st.session_state.current_trial_data
     
     # Display stimuli
     st.subheader("Choose the stimulus that appears more intense:")
@@ -348,13 +370,19 @@ def record_response(response, trial_data, is_practice=False):
         'timestamp': datetime.now().isoformat()
     }
     
+    # Add ADO stimulus value if available
+    if 'ado_stimulus_value' in trial_data:
+        trial_result['ado_stimulus_value'] = trial_data['ado_stimulus_value']
+    
     # Add to experiment manager
     exp_manager = st.session_state.experiment_manager
     exp_manager.record_trial(trial_result, is_practice)
     
-    # Reset trial state
+    # Reset trial state to allow new trial generation
     st.session_state.trial_start_time = None
     st.session_state.awaiting_response = False
+    st.session_state.trial_locked = False
+    st.session_state.current_trial_data = None
     
     # Show brief feedback
     st.success(f"Response recorded! (RT: {reaction_time:.2f}s)")
