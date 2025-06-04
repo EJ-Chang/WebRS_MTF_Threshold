@@ -294,6 +294,13 @@ def run_trial(is_practice=False):
     st.subheader("Which one is brighter?")
     st.caption("Click the button below the brighter circle")
     
+    # Debug information (temporary)
+    if st.session_state.get('show_debug', False):
+        left_val = current_trial['left_stimulus']
+        right_val = current_trial['right_stimulus']
+        expected_correct = 'left' if left_val > right_val else 'right'
+        st.info(f"DEBUG: Left={left_val:.3f}, Right={right_val:.3f}, Correct={expected_correct}")
+    
     # Create stimulus display
     col1, col2, col3 = st.columns([1, 2, 1])
     
@@ -320,6 +327,9 @@ def run_trial(is_practice=False):
             <p style="text-align: center; font-size: 12px; color: #666;">
                 Brightness: {left_intensity:.3f}
             </p>
+            <p style="text-align: center; font-size: 10px; color: #999;">
+                {'BRIGHTER' if left_intensity > current_trial['right_stimulus'] else 'dimmer'}
+            </p>
             """, unsafe_allow_html=True)
         
         with stim_col2:
@@ -339,6 +349,9 @@ def run_trial(is_practice=False):
             "></div>
             <p style="text-align: center; font-size: 12px; color: #666;">
                 Brightness: {right_intensity:.3f}
+            </p>
+            <p style="text-align: center; font-size: 10px; color: #999;">
+                {'BRIGHTER' if right_intensity > current_trial['left_stimulus'] else 'dimmer'}
             </p>
             """, unsafe_allow_html=True)
     
@@ -364,6 +377,12 @@ def run_trial(is_practice=False):
     
     # Keyboard shortcuts info
     st.markdown("*Use keyboard: **A** for Left, **L** for Right*")
+    
+    # Debug toggle
+    if st.checkbox("Show debug info (for troubleshooting)", key="debug_toggle"):
+        st.session_state.show_debug = True
+    else:
+        st.session_state.show_debug = False
 
 def record_response(response, trial_data, is_practice=False):
     """Record participant response and reaction time"""
@@ -399,8 +418,17 @@ def record_response(response, trial_data, is_practice=False):
     st.session_state.trial_locked = False
     st.session_state.current_trial_data = None
     
-    # Show brief feedback
-    st.success(f"Response recorded! (RT: {reaction_time:.2f}s)")
+    # Show detailed feedback
+    left_val = trial_data['left_stimulus']
+    right_val = trial_data['right_stimulus'] 
+    expected_correct = 'left' if left_val > right_val else 'right'
+    is_correct = response == expected_correct
+    
+    if is_correct:
+        st.success(f"✓ Correct! (RT: {reaction_time:.2f}s)")
+    else:
+        st.error(f"✗ Your response: {response.upper()}, Correct: {expected_correct.upper()} (RT: {reaction_time:.2f}s)")
+        st.write(f"Left brightness: {left_val:.3f}, Right brightness: {right_val:.3f}")
     
     # Auto-advance after brief delay
     time.sleep(exp_manager.inter_trial_interval)
