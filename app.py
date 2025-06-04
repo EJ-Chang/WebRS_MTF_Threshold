@@ -5,10 +5,8 @@ import time
 import random
 from datetime import datetime
 import json
-import base64
 from experiment import ExperimentManager
 from data_manager import DataManager
-from stimulus_manager import StimulusManager
 
 # Configure page
 st.set_page_config(
@@ -27,68 +25,10 @@ if 'experiment_manager' not in st.session_state:
     st.session_state.experiment_manager = None
 if 'data_manager' not in st.session_state:
     st.session_state.data_manager = DataManager()
-if 'stimulus_manager' not in st.session_state:
-    st.session_state.stimulus_manager = StimulusManager()
 if 'trial_start_time' not in st.session_state:
     st.session_state.trial_start_time = None
 if 'awaiting_response' not in st.session_state:
     st.session_state.awaiting_response = False
-
-def show_stimulus_preview_inline(stimulus_type):
-    """Show a preview of the stimulus type"""
-    st.subheader("Stimulus Preview")
-    
-    try:
-        stimulus_manager = st.session_state.stimulus_manager
-        
-        if stimulus_type.startswith('visual') or stimulus_type in ['gabor', 'noise']:
-            # Generate two example visual stimuli
-            low_intensity = stimulus_manager.generate_visual_stimulus(stimulus_type, 0.3)
-            high_intensity = stimulus_manager.generate_visual_stimulus(stimulus_type, 0.7)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Lower Intensity**")
-                st.markdown(f'<img src="{low_intensity}" style="width: 150px; height: 150px; border: 1px solid #ccc;">', 
-                           unsafe_allow_html=True)
-            with col2:
-                st.markdown("**Higher Intensity**")
-                st.markdown(f'<img src="{high_intensity}" style="width: 150px; height: 150px; border: 1px solid #ccc;">', 
-                           unsafe_allow_html=True)
-                
-        elif stimulus_type.startswith('auditory'):
-            # Generate example audio stimuli
-            low_audio = stimulus_manager.generate_audio_stimulus(stimulus_type, 0.3, duration=1.0)
-            high_audio = stimulus_manager.generate_audio_stimulus(stimulus_type, 0.7, duration=1.0)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Lower Intensity**")
-                st.audio(low_audio, format='audio/wav')
-            with col2:
-                st.markdown("**Higher Intensity**")
-                st.audio(high_audio, format='audio/wav')
-                
-        elif stimulus_type.startswith('video') or stimulus_type == 'flicker':
-            # Generate example video stimuli
-            low_video = stimulus_manager.generate_video_stimulus(stimulus_type, 0.3, duration=1.5)
-            high_video = stimulus_manager.generate_video_stimulus(stimulus_type, 0.7, duration=1.5)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Lower Intensity**")
-                st.markdown(f'<img src="{low_video}" style="width: 150px; height: 150px; border: 1px solid #ccc;">', 
-                           unsafe_allow_html=True)
-            with col2:
-                st.markdown("**Higher Intensity**")
-                st.markdown(f'<img src="{high_video}" style="width: 150px; height: 150px; border: 1px solid #ccc;">', 
-                           unsafe_allow_html=True)
-        
-        st.caption("These are examples showing the difference you'll be asked to detect.")
-        
-    except Exception as e:
-        st.error(f"Unable to generate stimulus preview: {str(e)}")
-        st.info("Preview unavailable, but the experiment will work normally.")
 
 def welcome_screen():
     """Display welcome screen and collect participant information"""
@@ -121,56 +61,6 @@ def welcome_screen():
     # Experiment configuration
     st.subheader("Experiment Configuration")
     
-    # Stimulus type selection
-    available_stimuli = st.session_state.stimulus_manager.get_available_stimulus_types()
-    
-    stimulus_categories = {
-        'Visual Stimuli': {
-            'visual_intensity': 'Brightness/Contrast',
-            'visual_size': 'Size Comparison',
-            'visual_color': 'Color Hue',
-            'gabor': 'Gabor Patches',
-            'noise': 'Visual Noise'
-        },
-        'Auditory Stimuli': {
-            'auditory_pitch': 'Pitch/Frequency',
-            'auditory_volume': 'Volume/Loudness',
-            'noise': 'Audio Noise'
-        },
-        'Video Stimuli': {
-            'video_speed': 'Motion Speed',
-            'flicker': 'Flicker Rate'
-        }
-    }
-    
-    st.subheader("Stimulus Type")
-    selected_category = st.selectbox("Choose stimulus category:", list(stimulus_categories.keys()))
-    stimulus_type = st.selectbox(
-        "Select specific stimulus type:", 
-        list(stimulus_categories[selected_category].keys()),
-        format_func=lambda x: stimulus_categories[selected_category][x]
-    )
-    
-    # Show description of selected stimulus type
-    descriptions = {
-        'visual_intensity': 'Compare circles with different brightness levels',
-        'visual_size': 'Compare circles of different sizes',
-        'visual_color': 'Compare circles with different color hues',
-        'gabor': 'Compare Gabor patches with different spatial frequencies',
-        'noise': 'Compare visual noise patterns with different intensities',
-        'auditory_pitch': 'Compare tones with different pitch/frequency',
-        'auditory_volume': 'Compare tones with different volume levels',
-        'noise': 'Compare white noise with different intensity levels',
-        'video_speed': 'Compare moving objects with different speeds',
-        'flicker': 'Compare flickering objects with different rates'
-    }
-    
-    st.info(f"**Task**: {descriptions.get(stimulus_type, 'Compare stimuli and choose the more intense one')}")
-    
-    # Show stimulus preview
-    if st.checkbox("Show stimulus preview"):
-        show_stimulus_preview_inline(stimulus_type)
-    
     col1, col2 = st.columns(2)
     with col1:
         num_trials = st.slider("Number of trials:", 10, 100, 30)
@@ -189,8 +79,7 @@ def welcome_screen():
                 num_practice_trials=num_practice_trials,
                 stimulus_duration=stimulus_duration,
                 inter_trial_interval=inter_trial_interval,
-                participant_id=st.session_state.participant_id,
-                stimulus_type=stimulus_type
+                participant_id=st.session_state.participant_id
             )
             st.session_state.experiment_stage = 'instructions'
             st.rerun()
@@ -203,32 +92,11 @@ def instructions_screen():
     st.markdown("---")
     
     st.header("Task Description")
+    st.write("""
+    In this experiment, you will see two stimuli presented side by side. Your task is to:
     
-    # Get experiment manager to show specific instructions
-    exp_manager = st.session_state.experiment_manager
-    stimulus_type = exp_manager.stimulus_type if exp_manager else "visual_intensity"
-    
-    # Specific instructions based on stimulus type
-    task_descriptions = {
-        'visual_intensity': "You will see two circles with different brightness levels. Choose the **brighter** one.",
-        'visual_size': "You will see two circles of different sizes. Choose the **larger** one.",
-        'visual_color': "You will see two colored circles. Choose the one with **higher color intensity**.",
-        'gabor': "You will see two Gabor patches (striped patterns). Choose the one with **higher spatial frequency** (more stripes).",
-        'noise': "You will see two visual noise patterns. Choose the one with **more intense noise**.",
-        'auditory_pitch': "You will hear two tones with different pitches. Choose the one with **higher pitch**.",
-        'auditory_volume': "You will hear two tones with different volumes. Choose the **louder** one.",
-        'video_speed': "You will see two moving objects. Choose the one moving **faster**.",
-        'flicker': "You will see two flickering objects. Choose the one flickering **faster**."
-    }
-    
-    description = task_descriptions.get(stimulus_type, "You will compare two stimuli and choose the more intense one.")
-    
-    st.write(f"""
-    {description}
-    
-    Your task is to:
-    1. **Examine both stimuli carefully**
-    2. **Make your choice based on the specific criterion**
+    1. **Look at both stimuli carefully**
+    2. **Choose which one appears brighter/more intense** (or according to the specific criterion)
     3. **Respond as quickly and accurately as possible**
     """)
     
@@ -340,18 +208,49 @@ def run_trial(is_practice=False):
         st.error("Error loading trial data")
         return
     
-    # Display appropriate instructions based on stimulus type
-    stimulus_type = current_trial['stimulus_type']
-    instructions = get_stimulus_instructions(stimulus_type)
-    st.subheader(instructions)
+    # Display stimuli
+    st.subheader("Choose the stimulus that appears more intense:")
+    
+    # Create stimulus display
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        # Display stimuli side by side
+        stim_col1, stim_col2 = st.columns(2)
+        
+        with stim_col1:
+            st.markdown("### Left Stimulus")
+            # Display stimulus (using circles with different intensities as example)
+            left_intensity = current_trial['left_stimulus']
+            st.markdown(f"""
+            <div style="
+                width: 150px; 
+                height: 150px; 
+                border-radius: 50%; 
+                background-color: rgba(0,0,0,{left_intensity}); 
+                margin: 20px auto;
+                border: 2px solid #ccc;
+            "></div>
+            """, unsafe_allow_html=True)
+        
+        with stim_col2:
+            st.markdown("### Right Stimulus")
+            right_intensity = current_trial['right_stimulus']
+            st.markdown(f"""
+            <div style="
+                width: 150px; 
+                height: 150px; 
+                border-radius: 50%; 
+                background-color: rgba(0,0,0,{right_intensity}); 
+                margin: 20px auto;
+                border: 2px solid #ccc;
+            "></div>
+            """, unsafe_allow_html=True)
     
     # Record trial start time if not already recorded
     if not st.session_state.awaiting_response:
         st.session_state.trial_start_time = time.time()
         st.session_state.awaiting_response = True
-    
-    # Display stimuli based on type
-    display_stimuli(current_trial)
     
     # Response buttons
     st.markdown("---")
@@ -370,87 +269,6 @@ def run_trial(is_practice=False):
     
     # Keyboard shortcuts info
     st.markdown("*Use keyboard: **A** for Left, **L** for Right*")
-
-def get_stimulus_instructions(stimulus_type):
-    """Get appropriate instructions for each stimulus type"""
-    instructions = {
-        'visual_intensity': "Choose the stimulus that appears brighter:",
-        'visual_size': "Choose the stimulus that appears larger:",
-        'visual_color': "Choose the stimulus with higher color intensity:",
-        'gabor': "Choose the stimulus with higher spatial frequency:",
-        'noise': "Choose the stimulus with more visual noise:",
-        'auditory_pitch': "Choose the stimulus with higher pitch:",
-        'auditory_volume': "Choose the stimulus that sounds louder:",
-        'video_speed': "Choose the stimulus moving faster:",
-        'flicker': "Choose the stimulus flickering faster:"
-    }
-    return instructions.get(stimulus_type, "Choose the more intense stimulus:")
-
-def display_stimuli(current_trial):
-    """Display stimuli based on their type"""
-    stimulus_type = current_trial['stimulus_type']
-    left_stimulus = current_trial['left_stimulus']
-    right_stimulus = current_trial['right_stimulus']
-    
-    if stimulus_type.startswith('visual') or stimulus_type in ['gabor', 'noise']:
-        display_visual_stimuli(left_stimulus, right_stimulus)
-    elif stimulus_type.startswith('auditory'):
-        display_audio_stimuli(left_stimulus, right_stimulus)
-    elif stimulus_type.startswith('video') or stimulus_type == 'flicker':
-        display_video_stimuli(left_stimulus, right_stimulus)
-
-def display_visual_stimuli(left_stimulus, right_stimulus):
-    """Display visual stimuli side by side"""
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        stim_col1, stim_col2 = st.columns(2)
-        
-        with stim_col1:
-            st.markdown("### Left Stimulus")
-            st.markdown(f'<img src="{left_stimulus["content"]}" style="width: 200px; height: 200px; border: 2px solid #ccc;">', 
-                       unsafe_allow_html=True)
-        
-        with stim_col2:
-            st.markdown("### Right Stimulus")
-            st.markdown(f'<img src="{right_stimulus["content"]}" style="width: 200px; height: 200px; border: 2px solid #ccc;">', 
-                       unsafe_allow_html=True)
-
-def display_audio_stimuli(left_stimulus, right_stimulus):
-    """Display audio stimuli with playback controls"""
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        stim_col1, stim_col2 = st.columns(2)
-        
-        with stim_col1:
-            st.markdown("### Left Stimulus")
-            st.markdown("🔊 Click to play")
-            st.audio(left_stimulus["content"], format='audio/wav')
-        
-        with stim_col2:
-            st.markdown("### Right Stimulus")
-            st.markdown("🔊 Click to play")
-            st.audio(right_stimulus["content"], format='audio/wav')
-        
-        st.info("💡 **Tip**: You can play each audio stimulus multiple times before making your choice")
-
-def display_video_stimuli(left_stimulus, right_stimulus):
-    """Display video stimuli (animated GIFs)"""
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        stim_col1, stim_col2 = st.columns(2)
-        
-        with stim_col1:
-            st.markdown("### Left Stimulus")
-            st.markdown(f'<img src="{left_stimulus["content"]}" style="width: 200px; height: 200px; border: 2px solid #ccc;">', 
-                       unsafe_allow_html=True)
-        
-        with stim_col2:
-            st.markdown("### Right Stimulus")
-            st.markdown(f'<img src="{right_stimulus["content"]}" style="width: 200px; height: 200px; border: 2px solid #ccc;">', 
-                       unsafe_allow_html=True)
 
 def record_response(response, trial_data, is_practice=False):
     """Record participant response and reaction time"""

@@ -2,14 +2,13 @@ import random
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional
-from stimulus_manager import StimulusManager
 
 class ExperimentManager:
     """Manages the flow and logic of the 2AFC psychophysics experiment"""
     
     def __init__(self, num_trials: int = 30, num_practice_trials: int = 5, 
                  stimulus_duration: float = 2.0, inter_trial_interval: float = 1.0,
-                 participant_id: str = "", stimulus_type: str = "visual_intensity"):
+                 participant_id: str = ""):
         """
         Initialize the experiment manager
         
@@ -19,17 +18,12 @@ class ExperimentManager:
             stimulus_duration: Duration to show stimuli (seconds)
             inter_trial_interval: Pause between trials (seconds)
             participant_id: Unique identifier for participant
-            stimulus_type: Type of stimulus to use in the experiment
         """
         self.num_trials = num_trials
         self.num_practice_trials = num_practice_trials
         self.stimulus_duration = stimulus_duration
         self.inter_trial_interval = inter_trial_interval
         self.participant_id = participant_id
-        self.stimulus_type = stimulus_type
-        
-        # Initialize stimulus manager
-        self.stimulus_manager = StimulusManager()
         
         # Trial management
         self.current_trial = 0
@@ -63,16 +57,21 @@ class ExperimentManager:
         trials = []
         
         for i in range(num_trials):
-            # Generate stimuli using the stimulus manager
-            stimuli = self.stimulus_manager.create_trial_stimuli(self.stimulus_type, num_stimuli=2)
+            # Generate stimulus intensities (0.1 to 0.9 for visual contrast)
+            # In a real experiment, these would be based on your specific paradigm
+            left_intensity = round(random.uniform(0.2, 0.8), 2)
+            right_intensity = round(random.uniform(0.2, 0.8), 2)
+            
+            # Ensure some difference between stimuli
+            while abs(left_intensity - right_intensity) < 0.1:
+                right_intensity = round(random.uniform(0.2, 0.8), 2)
             
             trial = {
                 'trial_number': i + 1,
-                'stimulus_type': self.stimulus_type,
-                'left_stimulus': stimuli[0],
-                'right_stimulus': stimuli[1],
-                'correct_response': 'left' if stimuli[0]['parameter'] > stimuli[1]['parameter'] else 'right',
-                'stimulus_difference': abs(stimuli[0]['parameter'] - stimuli[1]['parameter']),
+                'left_stimulus': left_intensity,
+                'right_stimulus': right_intensity,
+                'correct_response': 'left' if left_intensity > right_intensity else 'right',
+                'stimulus_difference': abs(left_intensity - right_intensity),
                 'is_practice': is_practice
             }
             
@@ -134,12 +133,9 @@ class ExperimentManager:
         # Determine if response was correct (for analysis purposes)
         current_trial = self.get_current_trial(is_practice)
         if current_trial:
-            trial_result['stimulus_type'] = current_trial['stimulus_type']
             trial_result['correct_response'] = current_trial['correct_response']
             trial_result['is_correct'] = trial_result['response'] == current_trial['correct_response']
             trial_result['stimulus_difference'] = current_trial['stimulus_difference']
-            trial_result['left_parameter'] = current_trial['left_stimulus']['parameter']
-            trial_result['right_parameter'] = current_trial['right_stimulus']['parameter']
         
         if is_practice:
             self.practice_data.append(trial_result)
