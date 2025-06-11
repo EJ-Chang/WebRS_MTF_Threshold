@@ -13,13 +13,85 @@ from io import BytesIO
 from PIL import Image
 import cv2
 
-# Import the ADO and MTF utilities
+# Import the ADO and MTF utilities with fallback handling
 try:
     from experiments.ado_utils import ADOEngine
     from experiments.mtf_utils import apply_mtf_to_image, load_and_prepare_image
+    MTF_UTILS_AVAILABLE = True
 except ImportError as e:
-    print(f"Import error: {e}")
-    # Fallback - will need to handle this in the web interface
+    print(f"MTF utilities not available: {e}")
+    MTF_UTILS_AVAILABLE = False
+    
+    # Fallback implementations for web interface
+    def apply_mtf_to_image(image, mtf_percent):
+        """Fallback MTF implementation using simple Gaussian blur"""
+        import cv2
+        # Simple approximation: lower MTF = more blur
+        sigma = (100 - mtf_percent) / 20.0  # Convert MTF% to blur amount
+        return cv2.GaussianBlur(image, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    
+    def load_and_prepare_image(path, use_right_half=True):
+        """Fallback image loading"""
+        import cv2
+        img = cv2.imread(path)
+        if img is not None:
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            if use_right_half:
+                width = img_rgb.shape[1]
+                mid_point = width // 2
+                img_rgb = img_rgb[:, mid_point:]
+            return img_rgb
+        return None
+    
+    # Simple ADO fallback
+    class ADOEngine:
+        def __init__(self, **kwargs):
+            self.design_space = kwargs.get('design_space', np.arange(10, 90, 10))
+            self.trial_history = []
+            self.response_history = []
+            
+        def get_optimal_design(self):
+            # Simple adaptive strategy: start high, move toward threshold
+            if len(self.trial_history) == 0:
+                return 70.0  # Start with high MTF
+            
+            # Simple 1-up-1-down strategy
+            last_response = self.response_history[-1] if self.response_history else 1
+            last_mtf = self.trial_history[-1] if self.trial_history else 70.0
+            
+            if last_response == 1:  # Clear response, make it harder
+                return max(10.0, last_mtf - 10.0)
+            else:  # Not clear, make it easier
+                return min(90.0, last_mtf + 10.0)
+        
+        def update_posterior(self, mtf, response):
+            self.trial_history.append(mtf)
+            self.response_history.append(response)
+        
+        def get_parameter_estimates(self):
+            if len(self.trial_history) < 3:
+                return {
+                    'threshold_mean': 50.0,
+                    'threshold_sd': 20.0,
+                    'slope_mean': 1.0,
+                    'slope_sd': 0.5
+                }
+            
+            # Estimate threshold as average of reversal points
+            responses = np.array(self.response_history)
+            if len(responses) > 2:
+                threshold_est = np.mean(self.trial_history[-5:]) if len(self.trial_history) >= 5 else np.mean(self.trial_history)
+                uncertainty = np.std(self.trial_history[-5:]) if len(self.trial_history) >= 5 else 10.0
+            else:
+                threshold_est = 50.0
+                uncertainty = 15.0
+                
+            return {
+                'threshold_mean': threshold_est,
+                'threshold_sd': uncertainty,
+                'slope_mean': 1.0,
+                'slope_sd': 0.3
+            }
 
 class MTFExperimentManager:
     """Manages MTF ADO experiment for web interface"""

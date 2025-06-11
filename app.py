@@ -223,14 +223,26 @@ def welcome_screen():
     if st.button("Start Experiment", type="primary"):
         if participant_id.strip():
             st.session_state.participant_id = participant_id.strip()
-            st.session_state.experiment_manager = ExperimentManager(
-                num_trials=num_trials,
-                num_practice_trials=num_practice_trials,
-                stimulus_duration=stimulus_duration,
-                inter_trial_interval=inter_trial_interval,
-                participant_id=st.session_state.participant_id,
-                use_ado=use_ado
-            )
+            st.session_state.experiment_type = experiment_type
+            
+            if experiment_type == "Brightness Discrimination (2AFC)":
+                st.session_state.experiment_manager = ExperimentManager(
+                    num_trials=num_trials if 'num_trials' in locals() else 30,
+                    num_practice_trials=num_practice_trials if 'num_practice_trials' in locals() else 5,
+                    stimulus_duration=stimulus_duration,
+                    inter_trial_interval=inter_trial_interval if 'inter_trial_interval' in locals() else 1.0,
+                    participant_id=st.session_state.participant_id,
+                    use_ado=use_ado
+                )
+            else:
+                st.session_state.mtf_experiment_manager = MTFExperimentManager(
+                    max_trials=max_trials if 'max_trials' in locals() else 50,
+                    min_trials=min_trials if 'min_trials' in locals() else 15,
+                    convergence_threshold=convergence_threshold if 'convergence_threshold' in locals() else 0.15,
+                    participant_id=st.session_state.participant_id
+                )
+                st.session_state.stimulus_duration = stimulus_duration
+            
             st.session_state.experiment_stage = 'instructions'
             st.rerun()
         else:
@@ -642,9 +654,266 @@ def record_response(response, trial_data, is_practice=False):
     time.sleep(exp_manager.inter_trial_interval)
     st.rerun()
 
+# MTF Experiment Functions
+def mtf_trial_screen():
+    """Handle MTF clarity testing trials"""
+    if 'mtf_experiment_manager' not in st.session_state:
+        st.error("MTF experiment not properly initialized")
+        st.session_state.experiment_stage = 'welcome'
+        st.rerun()
+        return
+    
+    exp_manager = st.session_state.mtf_experiment_manager
+    
+    # Check if experiment is complete
+    if exp_manager.is_experiment_complete():
+        st.session_state.experiment_stage = 'mtf_results'
+        st.rerun()
+        return
+    
+    # Initialize trial state
+    if 'mtf_current_trial' not in st.session_state:
+        st.session_state.mtf_current_trial = None
+        st.session_state.mtf_trial_start_time = None
+        st.session_state.mtf_awaiting_response = False
+    
+    # Get current trial
+    if not st.session_state.mtf_awaiting_response:
+        current_trial = exp_manager.get_next_trial()
+        if current_trial is None:
+            st.session_state.experiment_stage = 'mtf_results'
+            st.rerun()
+            return
+        
+        st.session_state.mtf_current_trial = current_trial
+        st.session_state.mtf_trial_start_time = time.time()
+        st.session_state.mtf_awaiting_response = True
+    else:
+        current_trial = st.session_state.mtf_current_trial
+    
+    # Display trial information
+    st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
+    
+    # Show current estimates if available
+    if current_trial['trial_number'] > 1:
+        estimates = exp_manager.get_current_estimates()
+        if not np.isnan(estimates['threshold_mean']):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Estimated Threshold", f"{estimates['threshold_mean']:.1f}% MTF")
+            with col2:
+                st.metric("Uncertainty", f"±{estimates['threshold_sd']:.1f}")
+    
+    st.markdown("---")
+    
+    # Display stimulus
+    st.subheader("Is this image clear?")
+    st.caption(f"MTF Value: {current_trial['mtf_value']:.1f}%")
+    
+    # Show the stimulus image
+    if current_trial['stimulus_image']:
+        st.image(current_trial['stimulus_image'], width=400, caption="Judge the clarity of this image")
+    else:
+        st.warning("Generating test pattern as stimulus...")
+        # Create a simple test pattern for demonstration
+        test_pattern = np.random.randint(0, 255, (200, 200, 3), dtype=np.uint8)
+        # Apply simple blur based on MTF value
+        import cv2
+        sigma = (100 - current_trial['mtf_value']) / 20.0
+        blurred = cv2.GaussianBlur(test_pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
+        st.image(blurred, width=400, caption=f"Test pattern with {current_trial['mtf_value']:.1f}% MTF")
+    
+    # Response buttons
+    st.markdown("### Your Response:")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("✓ Clear", key="clear_button", type="primary", use_container_width=True):
+            record_mtf_response(current_trial, True)
+    
+    with col2:
+        if st.button("✗ Not Clear", key="not_clear_button", use_container_width=True):
+            record_mtf_response(current_trial, False)
+    
+    # Keyboard shortcuts
+    st.markdown("*Use keyboard: **Y** for Clear, **N** for Not Clear*")
+
+def record_mtf_response(trial_data, is_clear):
+    """Record MTF trial response"""
+    if st.session_state.mtf_trial_start_time is None:
+        st.error("Trial timing error")
+        return
+    
+    reaction_time = time.time() - st.session_state.mtf_trial_start_time
+    exp_manager = st.session_state.mtf_experiment_manager
+    
+    # Record the response
+    trial_result = exp_manager.record_response(trial_data, is_clear, reaction_time)
+    
+    # Reset trial state
+    st.session_state.mtf_awaiting_response = False
+    st.session_state.mtf_current_trial = None
+    st.session_state.mtf_trial_start_time = None
+    
+    # Show feedback
+    response_text = "Clear" if is_clear else "Not Clear"
+    st.success(f"Response recorded: {response_text} (RT: {reaction_time:.2f}s)")
+    
+    # Check if converged
+    if trial_result.get('converged', False):
+        estimates = exp_manager.get_current_estimates()
+        st.info(f"Experiment converged! Estimated threshold: {estimates['threshold_mean']:.1f}% MTF")
+    
+    # Auto-advance
+    time.sleep(st.session_state.get('stimulus_duration', 1.0))
+    st.rerun()
+
+def mtf_results_screen():
+    """Display MTF experiment results"""
+    if 'mtf_experiment_manager' not in st.session_state:
+        st.error("No MTF experiment data found")
+        return
+    
+    exp_manager = st.session_state.mtf_experiment_manager
+    summary = exp_manager.get_experiment_summary()
+    trial_data = exp_manager.export_data()
+    
+    st.title("🎉 MTF Experiment Complete!")
+    st.balloons()
+    
+    # Summary metrics
+    if summary:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Trials", summary.get('total_trials', 0))
+        with col2:
+            st.metric("Clear Responses", f"{summary.get('clear_responses', 0)}")
+        with col3:
+            st.metric("Average RT", f"{summary.get('average_reaction_time', 0):.2f}s")
+        
+        # Final threshold estimate
+        if not np.isnan(summary.get('final_threshold', np.nan)):
+            st.subheader("Final Results")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("MTF Threshold", f"{summary['final_threshold']:.1f}%")
+            with col2:
+                st.metric("Uncertainty", f"±{summary.get('threshold_uncertainty', 0):.1f}")
+            
+            convergence_status = "Yes" if summary.get('converged', False) else "No"
+            st.info(f"Experiment converged: {convergence_status}")
+    
+    # Generate psychometric function for MTF data
+    st.subheader("Your MTF Function")
+    if trial_data:
+        plot_mtf_psychometric_function(trial_data)
+    
+    # Data export
+    st.subheader("Download Data")
+    if st.button("Download MTF Results", type="primary"):
+        # Convert trial data to CSV format
+        df = pd.DataFrame(trial_data)
+        csv_data = df.to_csv(index=False)
+        
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name=f"mtf_experiment_{summary.get('participant_id', 'unknown')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+    
+    # Restart option
+    if st.button("Start New Experiment"):
+        # Clear session state
+        for key in list(st.session_state.keys()):
+            if key.startswith('mtf_'):
+                del st.session_state[key]
+        st.session_state.experiment_stage = 'welcome'
+        st.rerun()
+
+def plot_mtf_psychometric_function(trial_data):
+    """Plot psychometric function for MTF data"""
+    if not trial_data:
+        st.warning("No trial data available for plotting")
+        return
+    
+    df = pd.DataFrame(trial_data)
+    
+    # Group by MTF value and calculate proportion clear
+    grouped = df.groupby('mtf_value').agg({
+        'response': ['count', 'sum', 'mean'],
+        'reaction_time': 'mean'
+    }).round(3)
+    
+    grouped.columns = ['n_trials', 'n_clear', 'prop_clear', 'mean_rt']
+    grouped = grouped.reset_index()
+    
+    # Filter groups with sufficient data
+    grouped = grouped[grouped['n_trials'] >= 1]
+    
+    if len(grouped) == 0:
+        st.warning("Not enough data points for psychometric function")
+        return
+    
+    # Create plot
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=grouped['mtf_value'],
+        y=grouped['prop_clear'],
+        mode='markers+lines',
+        marker=dict(
+            size=grouped['n_trials'] * 3,
+            color=grouped['mean_rt'],
+            colorscale='Viridis',
+            showscale=True,
+            colorbar=dict(title="Mean RT (s)")
+        ),
+        line=dict(width=2),
+        name='Proportion Clear',
+        hovertemplate=
+        'MTF Value: %{x:.1f}%<br>' +
+        'Proportion Clear: %{y:.2f}<br>' +
+        'Trials: %{text}<br>' +
+        'Mean RT: %{marker.color:.2f}s<extra></extra>',
+        text=grouped['n_trials']
+    ))
+    
+    # Add 50% threshold line
+    fig.add_hline(y=0.5, line_dash="dash", line_color="red", annotation_text="50% Threshold")
+    
+    # Estimate threshold
+    if len(grouped) >= 2:
+        try:
+            threshold_estimate = np.interp(0.5, grouped['prop_clear'], grouped['mtf_value'])
+            fig.add_vline(
+                x=threshold_estimate,
+                line_dash="dash",
+                line_color="orange",
+                annotation_text=f"Est. Threshold: {threshold_estimate:.1f}%"
+            )
+        except:
+            pass
+    
+    fig.update_layout(
+        title="MTF Psychometric Function - Clarity Judgments",
+        xaxis_title="MTF Value (%)",
+        yaxis_title="Proportion Clear",
+        yaxis=dict(range=[0, 1]),
+        width=700,
+        height=500
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Show data table
+    with st.expander("Detailed Results by MTF Value"):
+        st.dataframe(grouped, use_container_width=True)
+
 # Main app logic
 def main():
     """Main application logic"""
+    experiment_type = st.session_state.get('experiment_type', 'Brightness Discrimination (2AFC)')
     
     # Handle different experiment stages
     if st.session_state.experiment_stage == 'welcome':
@@ -652,13 +921,22 @@ def main():
     elif st.session_state.experiment_stage == 'instructions':
         instructions_screen()
     elif st.session_state.experiment_stage == 'practice':
-        practice_screen()
+        if experiment_type == "Brightness Discrimination (2AFC)":
+            practice_screen()
+        else:
+            # MTF experiments skip practice, go directly to trials
+            st.session_state.experiment_stage = 'mtf_trial'
+            st.rerun()
     elif st.session_state.experiment_stage == 'experiment':
         experiment_screen()
+    elif st.session_state.experiment_stage == 'mtf_trial':
+        mtf_trial_screen()
+    elif st.session_state.experiment_stage == 'mtf_results':
+        mtf_results_screen()
     
     # Add footer
     st.markdown("---")
-    st.markdown("*Psychophysics 2AFC Experiment Platform*")
+    st.markdown("*Psychophysics Experiment Platform*")
 
 if __name__ == "__main__":
     main()
