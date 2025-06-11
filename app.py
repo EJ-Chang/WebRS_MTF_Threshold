@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from experiment import ExperimentManager
 from data_manager import DataManager
+from mtf_experiment import MTFExperimentManager
 
 # Configure page
 st.set_page_config(
@@ -171,17 +172,41 @@ def welcome_screen():
         help="Enter a unique identifier (e.g., your initials + date)"
     )
     
+    # Experiment type selection
+    st.subheader("Experiment Type")
+    experiment_type = st.radio(
+        "Choose experiment type:",
+        ["Brightness Discrimination (2AFC)", "MTF Clarity Testing (Y/N)"],
+        help="Select the type of psychophysical experiment to run"
+    )
+    
+    if experiment_type == "Brightness Discrimination (2AFC)":
+        st.info("Traditional 2AFC brightness discrimination task with two circles")
+    else:
+        st.info("MTF (Modulation Transfer Function) clarity testing with image stimuli")
+    
     # Experiment configuration
     st.subheader("Experiment Configuration")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        num_trials = st.slider("Number of trials:", 10, 100, 30)
-        stimulus_duration = st.slider("Stimulus duration (seconds):", 0.5, 5.0, 2.0, 0.1)
-    
-    with col2:
-        inter_trial_interval = st.slider("Inter-trial interval (seconds):", 0.5, 3.0, 1.0, 0.1)
-        num_practice_trials = st.slider("Practice trials:", 3, 10, 5)
+    if experiment_type == "Brightness Discrimination (2AFC)":
+        col1, col2 = st.columns(2)
+        with col1:
+            num_trials = st.slider("Number of trials:", 10, 100, 30)
+            stimulus_duration = st.slider("Stimulus duration (seconds):", 0.5, 5.0, 2.0, 0.1)
+        
+        with col2:
+            inter_trial_interval = st.slider("Inter-trial interval (seconds):", 0.5, 3.0, 1.0, 0.1)
+            num_practice_trials = st.slider("Practice trials:", 3, 10, 5)
+    else:
+        # MTF experiment parameters
+        col1, col2 = st.columns(2)
+        with col1:
+            max_trials = st.slider("Maximum trials:", 20, 100, 50)
+            min_trials = st.slider("Minimum trials:", 10, 30, 15)
+        
+        with col2:
+            convergence_threshold = st.slider("Convergence threshold:", 0.05, 0.3, 0.15, 0.01)
+            stimulus_duration = st.slider("Stimulus duration (seconds):", 0.5, 5.0, 1.0, 0.1)
     
     # ADO configuration
     st.subheader("Adaptive Design Optimization (ADO)")
@@ -192,7 +217,7 @@ def welcome_screen():
     )
     
     if use_ado:
-        st.info("🧠 ADO will intelligently select stimuli to efficiently estimate your psychometric function parameters")
+        st.info("ADO will intelligently select stimuli to efficiently estimate your psychometric function parameters")
     
     # Start experiment button
     if st.button("Start Experiment", type="primary"):
