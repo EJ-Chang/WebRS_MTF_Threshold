@@ -354,14 +354,22 @@ def instructions_screen():
             st.rerun()
     
     with col2:
-        if st.button("Start Practice Trials →", type="primary"):
-            st.session_state.experiment_stage = 'practice'
-            st.session_state.experiment_manager.start_practice()
-            # Reset trial state for new session
-            st.session_state.trial_locked = False
-            st.session_state.current_trial_data = None
-            st.session_state.awaiting_response = False
-            st.rerun()
+        experiment_type = st.session_state.get('experiment_type', 'Brightness Discrimination (2AFC)')
+        
+        if experiment_type == "Brightness Discrimination (2AFC)":
+            if st.button("Start Practice Trials →", type="primary"):
+                st.session_state.experiment_stage = 'practice'
+                if hasattr(st.session_state, 'experiment_manager') and st.session_state.experiment_manager:
+                    st.session_state.experiment_manager.start_practice()
+                # Reset trial state for new session
+                st.session_state.trial_locked = False
+                st.session_state.current_trial_data = None
+                st.session_state.awaiting_response = False
+                st.rerun()
+        else:
+            if st.button("Start MTF Experiment →", type="primary"):
+                st.session_state.experiment_stage = 'mtf_trial'
+                st.rerun()
 
 def practice_screen():
     """Handle practice trials"""
@@ -691,6 +699,13 @@ def mtf_trial_screen():
     else:
         current_trial = st.session_state.mtf_current_trial
     
+    # Safety check
+    if current_trial is None:
+        st.error("Trial data error")
+        st.session_state.experiment_stage = 'mtf_results'
+        st.rerun()
+        return
+    
     # Display trial information
     st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
     
@@ -712,16 +727,41 @@ def mtf_trial_screen():
     
     # Show the stimulus image
     if current_trial['stimulus_image']:
-        st.image(current_trial['stimulus_image'], width=400, caption="Judge the clarity of this image")
+        # Display at actual size (1:1) without width constraint
+        st.image(current_trial['stimulus_image'], caption=f"Judge the clarity of this image (MTF: {current_trial['mtf_value']:.1f}%)")
     else:
-        st.warning("Generating test pattern as stimulus...")
-        # Create a simple test pattern for demonstration
-        test_pattern = np.random.randint(0, 255, (200, 200, 3), dtype=np.uint8)
-        # Apply simple blur based on MTF value
+        # Create a high-contrast test pattern that clearly shows MTF effects
         import cv2
-        sigma = (100 - current_trial['mtf_value']) / 20.0
-        blurred = cv2.GaussianBlur(test_pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
-        st.image(blurred, width=400, caption=f"Test pattern with {current_trial['mtf_value']:.1f}% MTF")
+        
+        # Create a high-resolution checkerboard pattern
+        pattern_size = 512
+        checker_size = 16
+        pattern = np.zeros((pattern_size, pattern_size), dtype=np.uint8)
+        
+        # Create checkerboard
+        for i in range(0, pattern_size, checker_size):
+            for j in range(0, pattern_size, checker_size):
+                if (i // checker_size + j // checker_size) % 2 == 0:
+                    pattern[i:i+checker_size, j:j+checker_size] = 255
+        
+        # Convert to RGB
+        pattern_rgb = np.stack([pattern, pattern, pattern], axis=-1)
+        
+        # Apply MTF filter with enhanced blur effect
+        mtf_value = current_trial['mtf_value']
+        # More aggressive blur for lower MTF values
+        sigma = ((100 - mtf_value) / 100.0) * 8.0  # Scale sigma from 0 to 8
+        
+        if sigma > 0.1:
+            blurred = cv2.GaussianBlur(pattern_rgb, (0, 0), sigmaX=sigma, sigmaY=sigma)
+        else:
+            blurred = pattern_rgb
+        
+        # Display at actual size
+        st.image(blurred, caption=f"Test pattern with {mtf_value:.1f}% MTF (sigma: {sigma:.2f})")
+        
+        # Show MTF effect info
+        st.info(f"MTF {mtf_value:.1f}% applied with Gaussian blur (σ={sigma:.2f}). Lower MTF = more blur.")
     
     # Response buttons
     st.markdown("### Your Response:")
@@ -825,9 +865,18 @@ def mtf_results_screen():
     # Restart option
     if st.button("Start New Experiment"):
         # Clear session state
-        for key in list(st.session_state.keys()):
-            if key.startswith('mtf_'):
-                del st.session_state[key]
+        keys_to_remove = []
+        for key in st.session_state.keys():
+            if str(key).startswith('mtf_'):
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            del st.session_state[key]
+        
+        # Also clear experiment manager
+        if 'mtf_experiment_manager' in st.session_state:
+            del st.session_state.mtf_experiment_manager
+            
         st.session_state.experiment_stage = 'welcome'
         st.rerun()
 

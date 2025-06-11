@@ -136,10 +136,13 @@ class MTFExperimentManager:
         try:
             if os.path.exists(self.base_image_path):
                 self.base_image = load_and_prepare_image(self.base_image_path, use_right_half=True)
-                print(f"Base image loaded: {self.base_image.shape}")
+                if self.base_image is not None:
+                    print(f"Base image loaded: {self.base_image.shape}")
+                else:
+                    print("Failed to load base image, creating test pattern")
+                    self.base_image = self._create_test_pattern()
             else:
                 print(f"Base image not found: {self.base_image_path}")
-                # Create a simple test pattern as fallback
                 self.base_image = self._create_test_pattern()
         except Exception as e:
             print(f"Error loading base image: {e}")
@@ -178,12 +181,16 @@ class MTFExperimentManager:
             print(f"Failed to initialize ADO engine: {e}")
             self.ado_engine = None
     
-    def generate_stimulus_image(self, mtf_value: float) -> str:
+    def generate_stimulus_image(self, mtf_value: float) -> Optional[str]:
         """
         Generate stimulus image with specified MTF value
         Returns base64 encoded image for web display
         """
         try:
+            if self.base_image is None:
+                print("No base image available")
+                return None
+                
             # Apply MTF to base image
             img_mtf = apply_mtf_to_image(self.base_image, mtf_value)
             
