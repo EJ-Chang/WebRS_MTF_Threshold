@@ -61,15 +61,46 @@ class DatabaseManager:
     """Manages database connections and operations"""
     
     def __init__(self):
-        self.database_url = os.getenv('DATABASE_URL')
-        if not self.database_url:
-            raise ValueError("DATABASE_URL environment variable not set")
+        self.database_url = self._get_database_url()
         
+        try:
+            self.engine = create_engine(self.database_url)
+            self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+            
+            # Create tables
+            Base.metadata.create_all(bind=self.engine)
+            print(f"✅ Database connected: {self.database_url.split('@')[0]}@***")
+            
+        except Exception as e:
+            print(f"⚠️ Database connection failed: {e}")
+            print("🔄 Falling back to SQLite...")
+            self._setup_sqlite_fallback()
+    
+    def _get_database_url(self):
+        """Get database URL with Replit-specific handling"""
+        # Try Replit PostgreSQL first
+        replit_db = os.getenv('REPLIT_DB_URL')
+        if replit_db:
+            print("🐘 Using Replit PostgreSQL")
+            return replit_db
+        
+        # Try standard DATABASE_URL
+        db_url = os.getenv('DATABASE_URL')
+        if db_url:
+            print("🐘 Using DATABASE_URL PostgreSQL")
+            return db_url
+        
+        # Fall back to SQLite for development
+        print("💾 Using SQLite fallback")
+        return "sqlite:///./psychophysics_experiments.db"
+    
+    def _setup_sqlite_fallback(self):
+        """Setup SQLite as fallback database"""
+        self.database_url = "sqlite:///./psychophysics_experiments.db"
         self.engine = create_engine(self.database_url)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-        
-        # Create tables
         Base.metadata.create_all(bind=self.engine)
+        print("✅ SQLite database initialized")
     
     def get_session(self):
         """Get a database session"""
