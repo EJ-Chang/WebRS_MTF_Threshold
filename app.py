@@ -20,7 +20,7 @@ st.set_page_config(
     page_title="Psychophysics 2AFC Experiment",
     page_icon="🧠",
     layout="wide",  # Changed to wide for better image display
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"  # Changed to expanded for ADO monitoring
 )
 
 def crop_image_to_viewport(image_array, target_width=800, target_height=600):
@@ -792,8 +792,7 @@ def record_response(response, trial_data, is_practice=False):
         st.error(f"✗ Your response: {response.upper()}, Correct: {expected_correct.upper()} (RT: {reaction_time:.2f}s)")
         st.write(f"Left brightness: {left_val:.3f}, Right brightness: {right_val:.3f}")
     
-    # Auto-advance after brief delay
-    time.sleep(exp_manager.inter_trial_interval)
+    # Auto-advance immediately (removed sleep for better performance)
     st.rerun()
 
 # MTF Experiment Functions
