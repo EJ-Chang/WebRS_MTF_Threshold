@@ -1349,32 +1349,63 @@ def plot_mtf_psychometric_function(trial_data):
 
 # Main app logic
 def show_data_storage_info():
-    """Display information about where data is stored"""
+    """Display information about database storage"""
     st.sidebar.markdown("---")
-    st.sidebar.subheader("📁 Data Storage")
+    st.sidebar.subheader("🗄️ Database Storage")
     
-    if 'data_files' in st.session_state and st.session_state.data_files:
-        st.sidebar.success("Data is being saved automatically!")
-        st.sidebar.write("**Your data files:**")
-        for filepath in st.session_state.data_files:
-            filename = os.path.basename(filepath)
-            st.sidebar.write(f"• {filename}")
-            
-        st.sidebar.write("**Location:** `data_storage/` folder")
+    try:
+        if 'db_manager' not in st.session_state:
+            st.session_state.db_manager = DatabaseManager()
         
-        # Show download button
-        if st.sidebar.button("📥 Download Latest Data"):
-            latest_file = st.session_state.data_files[-1]
-            if os.path.exists(latest_file):
-                with open(latest_file, 'r') as f:
-                    st.sidebar.download_button(
-                        label="Download CSV",
-                        data=f.read(),
-                        file_name=os.path.basename(latest_file),
-                        mime='text/csv'
-                    )
-    else:
-        st.sidebar.info("No data saved yet. Start an experiment to begin data collection.")
+        db = st.session_state.db_manager
+        
+        # Show current experiment info
+        if 'current_experiment_id' in st.session_state:
+            experiment_id = st.session_state.current_experiment_id
+            saved_trials = st.session_state.get('saved_trials', 0)
+            
+            st.sidebar.success("Data is being saved to PostgreSQL database!")
+            st.sidebar.write(f"**Current Experiment ID:** {experiment_id}")
+            st.sidebar.write(f"**Trials Saved:** {saved_trials}")
+            
+            # Show download button for current experiment
+            if st.sidebar.button("📥 Download Current Experiment"):
+                try:
+                    csv_data = db.export_to_csv(experiment_id)
+                    if csv_data:
+                        participant_id = st.session_state.get('participant_id', 'unknown')
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        filename = f"experiment_{experiment_id}_{participant_id}_{timestamp}.csv"
+                        
+                        st.sidebar.download_button(
+                            label="Download CSV",
+                            data=csv_data,
+                            file_name=filename,
+                            mime='text/csv'
+                        )
+                    else:
+                        st.sidebar.error("No data found for current experiment")
+                except Exception as e:
+                    st.sidebar.error(f"Error exporting data: {str(e)}")
+        
+        # Show participant history
+        participant_id = st.session_state.get('participant_id')
+        if participant_id:
+            try:
+                experiments = db.get_participant_experiments(participant_id)
+                if experiments:
+                    st.sidebar.write("**Previous Experiments:**")
+                    for exp in experiments[-3:]:  # Show last 3 experiments
+                        status = "✅ Complete" if exp['completed_at'] else "🔄 In Progress"
+                        st.sidebar.write(f"• ID {exp['id']}: {exp['experiment_type']} {status}")
+            except Exception as e:
+                st.sidebar.write("Database connection established")
+        else:
+            st.sidebar.info("Enter participant ID to see database storage")
+            
+    except Exception as e:
+        st.sidebar.error(f"Database connection error: {str(e)}")
+        st.sidebar.info("PostgreSQL database is available but connection failed")
 
 def main():
     """Main application logic"""
