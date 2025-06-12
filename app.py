@@ -14,6 +14,7 @@ import cv2
 from PIL import Image
 import base64
 from io import BytesIO
+import os
 
 # Configure page
 st.set_page_config(
@@ -808,6 +809,48 @@ def run_trial(is_practice=False):
 
 
 
+def save_experiment_data(trial_result, is_practice=False):
+    """Save experiment data to local storage after each trial"""
+    try:
+        # Ensure data_storage directory exists
+        os.makedirs('data_storage', exist_ok=True)
+        
+        # Generate filename with timestamp and participant ID
+        participant_id = st.session_state.get('participant_id', 'unknown')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        experiment_type = st.session_state.get('experiment_type', 'unknown')
+        
+        # Create filename
+        if is_practice:
+            filename = f"practice_{participant_id}_{timestamp}.csv"
+        else:
+            filename = f"{experiment_type.lower().replace(' ', '_')}_{participant_id}_{timestamp}.csv"
+        
+        filepath = os.path.join('data_storage', filename)
+        
+        # Convert trial result to DataFrame
+        df_new = pd.DataFrame([trial_result])
+        
+        # Append to existing file or create new one
+        if os.path.exists(filepath):
+            df_existing = pd.read_csv(filepath)
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+        else:
+            df_combined = df_new
+        
+        # Save to CSV
+        df_combined.to_csv(filepath, index=False)
+        
+        # Store filepath in session state for user reference
+        if 'data_files' not in st.session_state:
+            st.session_state.data_files = []
+        
+        if filepath not in st.session_state.data_files:
+            st.session_state.data_files.append(filepath)
+            
+    except Exception as e:
+        st.error(f"Error saving data: {str(e)}")
+
 def record_response(response, trial_data, is_practice=False):
     """Record participant response and reaction time"""
     if st.session_state.trial_start_time is None:
@@ -825,7 +868,8 @@ def record_response(response, trial_data, is_practice=False):
         'right_stimulus': trial_data['right_stimulus'],
         'response': response,
         'reaction_time': reaction_time,
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat(),
+        'participant_id': st.session_state.get('participant_id', 'unknown')
     }
     
     # Add ADO stimulus value if available
@@ -835,6 +879,9 @@ def record_response(response, trial_data, is_practice=False):
     # Add to experiment manager
     exp_manager = st.session_state.experiment_manager
     exp_manager.record_trial(trial_result, is_practice)
+    
+    # Auto-save data after each trial
+    save_experiment_data(trial_result, is_practice)
     
     # Reset trial state to allow new trial generation
     st.session_state.trial_start_time = None
@@ -859,6 +906,8 @@ def record_response(response, trial_data, is_practice=False):
     st.session_state.feedback_start_time = time.time()
     st.session_state.feedback_duration = min(exp_manager.inter_trial_interval, 1.5)  # Cap at 1.5s
     st.rerun()
+
+
 
 # MTF Experiment Functions
 def mtf_trial_screen():
