@@ -848,7 +848,7 @@ def record_response(response, trial_data, is_practice=False):
 
 # MTF Experiment Functions
 def mtf_trial_screen():
-    """Handle MTF clarity testing trials"""
+    """Handle MTF clarity testing trials with fixation and response delay"""
     if 'mtf_experiment_manager' not in st.session_state:
         st.error("MTF experiment not properly initialized")
         st.session_state.experiment_stage = 'welcome'
@@ -863,14 +863,16 @@ def mtf_trial_screen():
         st.rerun()
         return
     
-    # Initialize trial state
+    # Initialize trial state with fixation and timing
     if 'mtf_current_trial' not in st.session_state:
         st.session_state.mtf_current_trial = None
-        st.session_state.mtf_trial_start_time = None
+        st.session_state.mtf_trial_phase = 'fixation'  # fixation -> stimulus -> response
+        st.session_state.mtf_phase_start_time = None
+        st.session_state.mtf_stimulus_onset_time = None
         st.session_state.mtf_awaiting_response = False
     
     # Get current trial
-    if not st.session_state.mtf_awaiting_response:
+    if st.session_state.mtf_current_trial is None:
         current_trial = exp_manager.get_next_trial()
         if current_trial is None:
             st.session_state.experiment_stage = 'mtf_results'
@@ -878,8 +880,9 @@ def mtf_trial_screen():
             return
         
         st.session_state.mtf_current_trial = current_trial
-        st.session_state.mtf_trial_start_time = time.time()
-        st.session_state.mtf_awaiting_response = True
+        st.session_state.mtf_trial_phase = 'fixation'
+        st.session_state.mtf_phase_start_time = time.time()
+        st.rerun()
     else:
         current_trial = st.session_state.mtf_current_trial
     
@@ -890,149 +893,188 @@ def mtf_trial_screen():
         st.rerun()
         return
     
-    # Display trial information
-    st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
+    # Handle trial phases with timing
+    current_time = time.time()
     
-    # Show detailed ADO parameters and optimization status
-    if current_trial['trial_number'] > 1:
-        estimates = exp_manager.get_current_estimates()
+    if st.session_state.mtf_trial_phase == 'fixation':
+        # Fixation phase (1 second)
+        if st.session_state.mtf_phase_start_time is None:
+            st.session_state.mtf_phase_start_time = current_time
         
-        # Main parameter estimates
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("閾值估計", f"{estimates.get('threshold_mean', 0):.1f}% MTF")
-        with col2:
-            st.metric("閾值不確定性", f"±{estimates.get('threshold_sd', 0):.1f}")
-        with col3:
-            st.metric("斜率估計", f"{estimates.get('slope_mean', 0):.2f}")
-        with col4:
-            st.metric("斜率不確定性", f"±{estimates.get('slope_sd', 0):.2f}")
+        elapsed = current_time - st.session_state.mtf_phase_start_time
+        if elapsed < 1.0:
+            # Show fixation cross
+            st.markdown("""
+            <div style="display: flex; justify-content: center; align-items: center; height: 80vh; font-size: 100px; font-weight: bold;">
+                +
+            </div>
+            """, unsafe_allow_html=True)
+            time.sleep(0.1)
+            st.rerun()
+        else:
+            # Move to stimulus phase
+            st.session_state.mtf_trial_phase = 'stimulus'
+            st.session_state.mtf_stimulus_onset_time = current_time
+            st.session_state.mtf_phase_start_time = current_time
+            st.rerun()
+    
+    elif st.session_state.mtf_trial_phase == 'stimulus':
+        # Stimulus phase (show image, wait 1 second before allowing response)
+        if st.session_state.mtf_stimulus_onset_time is None:
+            st.session_state.mtf_stimulus_onset_time = current_time
+        elapsed_since_onset = current_time - st.session_state.mtf_stimulus_onset_time
         
-        # Additional ADO information
-        st.markdown("**ADO 優化狀態:**")
-        ado_col1, ado_col2, ado_col3 = st.columns(3)
-        
-        with ado_col1:
-            # Information gain from last trial
-            if hasattr(exp_manager, 'ado_engine') and exp_manager.ado_engine:
-                try:
-                    entropy = exp_manager.get_ado_entropy()
-                    st.metric("後驗熵值", f"{entropy:.3f}")
-                except:
-                    st.metric("後驗熵值", "計算中...")
+        # Show stimulus image
+        if current_trial['stimulus_image']:
+            display_fullscreen_image(
+                current_trial['stimulus_image'], 
+                caption=f"MTF: {current_trial['mtf_value']:.1f}%",
+                mtf_value=current_trial['mtf_value']
+            )
+        else:
+            # Fallback test pattern
+            mtf_value = current_trial['mtf_value']
+            if 'cached_pattern' not in st.session_state:
+                pattern_size = 800
+                checker_size = 20
+                pattern = np.zeros((pattern_size, pattern_size), dtype=np.uint8)
+                x, y = np.meshgrid(np.arange(pattern_size), np.arange(pattern_size))
+                checker_mask = ((x // checker_size) + (y // checker_size)) % 2 == 0
+                pattern[checker_mask] = 255
+                pattern_rgb = np.stack([pattern, pattern, pattern], axis=-1)
+                st.session_state.cached_pattern = pattern_rgb
+            
+            base_pattern = st.session_state.cached_pattern.copy()
+            sigma = ((100 - mtf_value) / 100.0) * 10.0
+            
+            if sigma > 0.5:
+                blurred = cv2.GaussianBlur(base_pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
             else:
-                st.metric("後驗熵值", "N/A")
+                blurred = base_pattern
+            
+            display_fullscreen_image(
+                blurred, 
+                caption=f"Test Pattern MTF {mtf_value:.1f}% (σ={sigma:.2f})",
+                mtf_value=mtf_value
+            )
         
-        with ado_col2:
-            # Convergence status
-            uncertainty = estimates.get('threshold_sd', 20)
-            convergence_progress = max(0, min(100, (20 - uncertainty) / 15 * 100))
-            st.metric("收斂進度", f"{convergence_progress:.0f}%")
+        # Check if 1 second has passed since stimulus onset
+        if elapsed_since_onset >= 1.0:
+            st.session_state.mtf_trial_phase = 'response'
+            st.rerun()
+        else:
+            # Show countdown or waiting message
+            remaining = 1.0 - elapsed_since_onset
+            st.info(f"Please wait {remaining:.1f}s before responding...")
+            time.sleep(0.1)
+            st.rerun()
+    
+    elif st.session_state.mtf_trial_phase == 'response':
+        # Response phase - show buttons and ADO feedback
+        st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
         
-        with ado_col3:
-            # Expected information gain for current trial
-            st.metric("當前 MTF", f"{current_trial['mtf_value']:.1f}%")
-    
-    st.markdown("---")
-    
-    # Display stimulus
-    st.subheader("Is this image clear?")
-    st.caption(f"MTF Value: {current_trial['mtf_value']:.1f}%")
+        # Show stimulus (without delay)
+        if current_trial['stimulus_image']:
+            display_fullscreen_image(
+                current_trial['stimulus_image'], 
+                caption=f"Is this image clear? MTF: {current_trial['mtf_value']:.1f}%",
+                mtf_value=current_trial['mtf_value']
+            )
+        
+        # Show response buttons
+        st.markdown("### Your Response:")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("✓ Clear", key="clear_button", type="primary", use_container_width=True):
+                record_mtf_response(current_trial, True)
+        
+        with col2:
+            if st.button("✗ Not Clear", key="not_clear_button", use_container_width=True):
+                record_mtf_response(current_trial, False)
     
     # Display ADO monitoring in sidebar
     display_ado_monitor(exp_manager, current_trial['trial_number'])
-    
-    # Show the stimulus image with improved display
-    if current_trial['stimulus_image']:
-        # Use new fullscreen display function
-        display_fullscreen_image(
-            current_trial['stimulus_image'], 
-            caption=f"判斷此圖片的清晰度 (MTF: {current_trial['mtf_value']:.1f}%)",
-            mtf_value=current_trial['mtf_value']
-        )
-    else:
-        # Create optimized test pattern without performance bottlenecks
-        mtf_value = current_trial['mtf_value']
-        
-        # Pre-generate pattern once and cache it
-        if 'cached_pattern' not in st.session_state:
-            # Create high-resolution checkerboard pattern
-            pattern_size = 800
-            checker_size = 20
-            pattern = np.zeros((pattern_size, pattern_size), dtype=np.uint8)
-            
-            # Vectorized checkerboard creation for better performance
-            x, y = np.meshgrid(np.arange(pattern_size), np.arange(pattern_size))
-            checker_mask = ((x // checker_size) + (y // checker_size)) % 2 == 0
-            pattern[checker_mask] = 255
-            
-            # Convert to RGB
-            pattern_rgb = np.stack([pattern, pattern, pattern], axis=-1)
-            st.session_state.cached_pattern = pattern_rgb
-        
-        # Apply MTF filter efficiently
-        base_pattern = st.session_state.cached_pattern.copy()
-        
-        # 正確的 MTF 轉換：MTF 值越低，模糊程度越高
-        # MTF 100% = 無模糊 (sigma=0)
-        # MTF 0% = 最大模糊 (sigma=10)
-        sigma = ((100 - mtf_value) / 100.0) * 10.0
-        
-        # 確保 sigma 不會太小，避免無效果
-        if sigma > 0.5:
-            blurred = cv2.GaussianBlur(base_pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
-        else:
-            blurred = base_pattern
-        
-        # Use new display function
-        display_fullscreen_image(
-            blurred, 
-            caption=f"測試圖案 MTF {mtf_value:.1f}% (σ={sigma:.2f})",
-            mtf_value=mtf_value
-        )
-    
-    # Response buttons
-    st.markdown("### Your Response:")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("✓ Clear", key="clear_button", type="primary", use_container_width=True):
-            record_mtf_response(current_trial, True)
-    
-    with col2:
-        if st.button("✗ Not Clear", key="not_clear_button", use_container_width=True):
-            record_mtf_response(current_trial, False)
     
     # Keyboard shortcuts
     st.markdown("*Use keyboard: **Y** for Clear, **N** for Not Clear*")
 
 def record_mtf_response(trial_data, is_clear):
-    """Record MTF trial response"""
-    if st.session_state.mtf_trial_start_time is None:
+    """Record MTF trial response with detailed ADO feedback"""
+    if 'mtf_stimulus_onset_time' not in st.session_state or st.session_state.mtf_stimulus_onset_time is None:
         st.error("Trial timing error")
         return
     
-    reaction_time = time.time() - st.session_state.mtf_trial_start_time
+    reaction_time = time.time() - st.session_state.mtf_stimulus_onset_time
     exp_manager = st.session_state.mtf_experiment_manager
     
+    # Get estimates before update
+    old_estimates = exp_manager.get_current_estimates() if trial_data['trial_number'] > 1 else None
+    
     # Record the response
-    trial_result = exp_manager.record_response(trial_data, is_clear, reaction_time)
+    exp_manager.record_response(trial_data, is_clear, reaction_time)
     
-    # Reset trial state
-    st.session_state.mtf_awaiting_response = False
+    # Get estimates after update
+    new_estimates = exp_manager.get_current_estimates()
+    
+    # Show detailed ADO feedback
+    st.success(f"Response: {'Clear' if is_clear else 'Not Clear'} (RT: {reaction_time:.2f}s)")
+    
+    # ADO Trial Summary
+    st.markdown("### ADO Trial Summary")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Trial MTF", f"{trial_data['mtf_value']:.1f}%")
+        st.metric("Response", "Clear" if is_clear else "Not Clear")
+    
+    with col2:
+        st.metric("Posterior Threshold", f"{new_estimates.get('threshold_mean', 0):.1f}%")
+        current_sd = new_estimates.get('threshold_sd', 0)
+        st.metric("Posterior SD", f"{current_sd:.2f}")
+        if old_estimates:
+            sd_change = current_sd - old_estimates.get('threshold_sd', 0)
+            st.caption(f"SD Change: {sd_change:+.2f}")
+    
+    with col3:
+        # Get next MTF value from ADO
+        if hasattr(exp_manager, 'ado_engine') and exp_manager.ado_engine and not exp_manager.is_experiment_complete():
+            try:
+                # Preview next optimal design
+                next_mtf = exp_manager.ado_engine.get_optimal_design()
+                st.metric("Next MTF", f"{next_mtf:.1f}%")
+            except:
+                st.metric("Next MTF", "Computing...")
+        else:
+            st.metric("Next MTF", "Complete" if exp_manager.is_experiment_complete() else "N/A")
+    
+    # Show optimization details
+    if hasattr(exp_manager, 'ado_engine') and exp_manager.ado_engine:
+        try:
+            entropy = exp_manager.get_ado_entropy()
+            st.caption(f"Posterior Entropy: {entropy:.3f} (lower = more certain)")
+        except:
+            pass
+    
+    # Convergence status
+    uncertainty = new_estimates.get('threshold_sd', 20)
+    if uncertainty < 3:
+        st.info("High precision achieved")
+    elif uncertainty < 6:
+        st.info("Good convergence progress")
+    else:
+        st.info("Learning in progress")
+    
+    # Reset trial state for next trial
     st.session_state.mtf_current_trial = None
-    st.session_state.mtf_trial_start_time = None
+    st.session_state.mtf_trial_phase = 'fixation'
+    st.session_state.mtf_phase_start_time = None
+    st.session_state.mtf_stimulus_onset_time = None
+    st.session_state.mtf_awaiting_response = False
     
-    # Show feedback
-    response_text = "清楚" if is_clear else "不清楚"
-    st.success(f"回應已記錄: {response_text} (反應時間: {reaction_time:.2f}秒)")
-    
-    # Check if converged
-    if trial_result.get('converged', False):
-        estimates = exp_manager.get_current_estimates()
-        st.info(f"實驗已收斂! 估計閾值: {estimates['threshold_mean']:.1f}% MTF")
-    
-    # Auto-advance immediately (removed sleep for better performance)
+    # Continue to next trial
+    st.markdown("**Continuing to next trial...**")
+    time.sleep(2)
     st.rerun()
 
 def mtf_results_screen():
