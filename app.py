@@ -54,6 +54,7 @@ def crop_image_to_viewport(image_array, target_width=800, target_height=600):
 def display_fullscreen_image(image_data, caption="", mtf_value=None):
     """
     Display image in fullscreen mode with proper sizing
+    保持原始像素比例，根據視窗智能裁切中心區域
     """
     if image_data is None:
         return
@@ -65,32 +66,57 @@ def display_fullscreen_image(image_data, caption="", mtf_value=None):
         img_bytes = base64.b64decode(base64_data)
         img = Image.open(BytesIO(img_bytes))
         image_array = np.array(img)
-    else:
+    elif isinstance(image_data, np.ndarray):
         image_array = image_data
-    
-    # Crop to optimal viewing size
-    processed_img = crop_image_to_viewport(image_array, target_width=900, target_height=600)
-    
-    if processed_img is not None:
-        # Convert back to PIL for display
-        img_pil = Image.fromarray(processed_img)
-        
-        # Convert to base64 for HTML display
-        buffer = BytesIO()
-        img_pil.save(buffer, format='PNG')
-        img_str = base64.b64encode(buffer.getvalue()).decode()
-        
-        # Display using HTML for better control
-        html_content = f"""
-        <div style="text-align: center; margin: 20px 0;">
-            <img src="data:image/png;base64,{img_str}" 
-                 style="max-width: 100%; height: auto; border: 2px solid #333; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
-            <p style="margin-top: 10px; font-size: 14px; color: #666;">{caption}</p>
-        </div>
-        """
-        st.markdown(html_content, unsafe_allow_html=True)
     else:
-        st.error("無法處理圖片")
+        # Convert other types to numpy array
+        image_array = np.array(image_data)
+    
+    # Ensure we have a valid numpy array
+    if not isinstance(image_array, np.ndarray):
+        st.error("無法處理圖片格式")
+        return
+    
+    # 根據視窗大小智能裁切中心區域，保持 1:1 像素比例
+    h, w = image_array.shape[:2]
+    
+    # 設定最大顯示尺寸 (適應網頁視窗)
+    max_display_width = 800
+    max_display_height = 600
+    
+    # 計算需要裁切的尺寸，保持中心位置
+    if w > max_display_width or h > max_display_height:
+        # 需要裁切
+        crop_width = min(w, max_display_width)
+        crop_height = min(h, max_display_height)
+        
+        # 計算中心裁切座標
+        start_x = (w - crop_width) // 2
+        start_y = (h - crop_height) // 2
+        
+        # 裁切中心區域
+        processed_img = image_array[start_y:start_y + crop_height, start_x:start_x + crop_width]
+    else:
+        # 圖片已經適合顯示尺寸
+        processed_img = image_array
+    
+    # Convert to PIL for display
+    img_pil = Image.fromarray(processed_img)
+    
+    # Convert to base64 for HTML display
+    buffer = BytesIO()
+    img_pil.save(buffer, format='PNG')
+    img_str = base64.b64encode(buffer.getvalue()).decode()
+    
+    # Display using HTML with 1:1 pixel ratio
+    html_content = f"""
+    <div style="text-align: center; margin: 20px 0;">
+        <img src="data:image/png;base64,{img_str}" 
+             style="max-width: 100%; height: auto; border: 2px solid #333; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">
+        <p style="margin-top: 10px; font-size: 14px; color: #666;">{caption}</p>
+    </div>
+    """
+    st.markdown(html_content, unsafe_allow_html=True)
 
 def display_ado_monitor(exp_manager, trial_number):
     """
