@@ -1102,8 +1102,22 @@ def record_mtf_response(trial_data, is_clear):
     # Get estimates before update
     old_estimates = exp_manager.get_current_estimates() if trial_data['trial_number'] > 1 else None
     
+    # Create trial result for data saving
+    mtf_trial_result = {
+        'trial_number': trial_data['trial_number'],
+        'mtf_value': trial_data['mtf_value'],
+        'response': 'clear' if is_clear else 'not_clear',
+        'reaction_time': reaction_time,
+        'timestamp': datetime.now().isoformat(),
+        'participant_id': st.session_state.get('participant_id', 'unknown'),
+        'experiment_type': 'MTF_Clarity'
+    }
+    
     # Record the response
     exp_manager.record_response(trial_data, is_clear, reaction_time)
+    
+    # Auto-save MTF data
+    save_experiment_data(mtf_trial_result, is_practice=False)
     
     # Get estimates after update
     new_estimates = exp_manager.get_current_estimates()
@@ -1322,8 +1336,47 @@ def plot_mtf_psychometric_function(trial_data):
         st.dataframe(grouped, use_container_width=True)
 
 # Main app logic
+def show_data_storage_info():
+    """Display information about where data is stored"""
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📁 Data Storage")
+    
+    if 'data_files' in st.session_state and st.session_state.data_files:
+        st.sidebar.success("Data is being saved automatically!")
+        st.sidebar.write("**Your data files:**")
+        for filepath in st.session_state.data_files:
+            filename = os.path.basename(filepath)
+            st.sidebar.write(f"• {filename}")
+            
+        st.sidebar.write("**Location:** `data_storage/` folder")
+        
+        # Show download button
+        if st.sidebar.button("📥 Download Latest Data"):
+            latest_file = st.session_state.data_files[-1]
+            if os.path.exists(latest_file):
+                with open(latest_file, 'r') as f:
+                    st.sidebar.download_button(
+                        label="Download CSV",
+                        data=f.read(),
+                        file_name=os.path.basename(latest_file),
+                        mime='text/csv'
+                    )
+    else:
+        st.sidebar.info("No data saved yet. Start an experiment to begin data collection.")
+
 def main():
     """Main application logic"""
+    # Initialize session state for smooth transitions
+    if 'experiment_stage' not in st.session_state:
+        st.session_state.experiment_stage = 'welcome'
+    if 'trial_locked' not in st.session_state:
+        st.session_state.trial_locked = False
+    if 'show_feedback' not in st.session_state:
+        st.session_state.show_feedback = False
+    
+    # Show data storage info in sidebar
+    show_data_storage_info()
+    
     experiment_type = st.session_state.get('experiment_type', 'Brightness Discrimination (2AFC)')
     
     # Handle different experiment stages
