@@ -20,7 +20,7 @@ st.set_page_config(
     page_title="Psychophysics 2AFC Experiment",
     page_icon="🧠",
     layout="wide",  # Changed to wide for better image display
-    initial_sidebar_state="expanded"  # Changed to expanded for ADO monitoring
+    initial_sidebar_state="collapsed"
 )
 
 def crop_image_to_viewport(image_array, target_width=800, target_height=600):
@@ -792,7 +792,8 @@ def record_response(response, trial_data, is_practice=False):
         st.error(f"✗ Your response: {response.upper()}, Correct: {expected_correct.upper()} (RT: {reaction_time:.2f}s)")
         st.write(f"Left brightness: {left_val:.3f}, Right brightness: {right_val:.3f}")
     
-    # Auto-advance immediately (removed sleep for better performance)
+    # Auto-advance after brief delay
+    time.sleep(exp_manager.inter_trial_interval)
     st.rerun()
 
 # MTF Experiment Functions
@@ -889,20 +890,9 @@ def mtf_trial_screen():
             pattern_rgb = np.stack([pattern, pattern, pattern], axis=-1)
             st.session_state.cached_pattern = pattern_rgb
         
-        # Apply MTF filter with enhanced mapping for visible effects
+        # Apply MTF filter efficiently
         base_pattern = st.session_state.cached_pattern.copy()
-        
-        # Use same enhanced MTF mapping as in mtf_experiment.py
-        if mtf_value >= 90:
-            sigma = 0.5  # Minimal blur for high MTF
-        elif mtf_value >= 70:
-            sigma = 1.5 + (90 - mtf_value) * 0.2  # Gradual increase
-        elif mtf_value >= 50:
-            sigma = 5.5 + (70 - mtf_value) * 0.3  # More noticeable blur
-        elif mtf_value >= 30:
-            sigma = 11.5 + (50 - mtf_value) * 0.4  # Strong blur
-        else:
-            sigma = 19.5 + (30 - mtf_value) * 0.5  # Very strong blur
+        sigma = ((100 - mtf_value) / 100.0) * 6.0  # Reduced max sigma for performance
         
         if sigma > 0.1:
             blurred = cv2.GaussianBlur(base_pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
@@ -912,18 +902,9 @@ def mtf_trial_screen():
         # Use new display function
         display_fullscreen_image(
             blurred, 
-            caption=f"測試圖案 MTF {mtf_value:.1f}% (模糊參數σ={sigma:.2f})",
+            caption=f"測試圖案 MTF {mtf_value:.1f}% (σ={sigma:.2f})",
             mtf_value=mtf_value
         )
-        
-        # Debug: Show MTF effect comparison if requested
-        if st.session_state.get('show_mtf_debug', False):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.image(base_pattern, caption="原始圖案", width=300)
-            with col2:
-                st.image(blurred, caption=f"MTF {mtf_value:.1f}% 處理後", width=300)
-            st.info(f"模糊強度: σ={sigma:.2f} - MTF值越低，模糊越明顯")
     
     # Response buttons
     st.markdown("### Your Response:")
@@ -939,12 +920,6 @@ def mtf_trial_screen():
     
     # Keyboard shortcuts
     st.markdown("*Use keyboard: **Y** for Clear, **N** for Not Clear*")
-    
-    # MTF Debug toggle
-    if st.checkbox("顯示MTF效果對比 (調試用)", key="mtf_debug_toggle"):
-        st.session_state.show_mtf_debug = True
-    else:
-        st.session_state.show_mtf_debug = False
 
 def record_mtf_response(trial_data, is_clear):
     """Record MTF trial response"""

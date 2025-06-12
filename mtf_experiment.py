@@ -24,26 +24,11 @@ except ImportError as e:
     
     # Fallback implementations for web interface
     def apply_mtf_to_image(image, mtf_percent):
-        """Enhanced MTF implementation with more noticeable effects"""
+        """Fallback MTF implementation using simple Gaussian blur"""
         import cv2
-        # More aggressive MTF mapping for clearer perceptual differences
-        # Lower MTF values should produce significantly more blur
-        if mtf_percent >= 90:
-            sigma = 0.5  # Minimal blur for high MTF
-        elif mtf_percent >= 70:
-            sigma = 1.5 + (90 - mtf_percent) * 0.2  # Gradual increase
-        elif mtf_percent >= 50:
-            sigma = 5.5 + (70 - mtf_percent) * 0.3  # More noticeable blur
-        elif mtf_percent >= 30:
-            sigma = 11.5 + (50 - mtf_percent) * 0.4  # Strong blur
-        else:
-            sigma = 19.5 + (30 - mtf_percent) * 0.5  # Very strong blur
-        
-        # Apply Gaussian blur
-        blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=sigma, sigmaY=sigma)
-        
-        print(f"Applied MTF {mtf_percent:.1f}% with sigma={sigma:.2f}")
-        return blurred
+        # Simple approximation: lower MTF = more blur
+        sigma = (100 - mtf_percent) / 20.0  # Convert MTF% to blur amount
+        return cv2.GaussianBlur(image, (0, 0), sigmaX=sigma, sigmaY=sigma)
     
     def load_and_prepare_image(path, use_right_half=True):
         """Fallback image loading"""
@@ -150,63 +135,35 @@ class MTFExperimentManager:
         """Load and prepare the base stimulus image"""
         try:
             if os.path.exists(self.base_image_path):
-                print(f"Attempting to load image from: {self.base_image_path}")
                 self.base_image = load_and_prepare_image(self.base_image_path, use_right_half=True)
                 if self.base_image is not None:
-                    print(f"Base image loaded successfully: {self.base_image.shape}")
-                    # Ensure image is at least 400x400 for good MTF effects
-                    h, w = self.base_image.shape[:2]
-                    if h < 400 or w < 400:
-                        # Resize smaller images
-                        target_size = max(400, max(h, w))
-                        self.base_image = cv2.resize(self.base_image, (target_size, target_size))
-                        print(f"Resized image to: {self.base_image.shape}")
+                    print(f"Base image loaded: {self.base_image.shape}")
                 else:
-                    print("Failed to load base image, creating enhanced test pattern")
+                    print("Failed to load base image, creating test pattern")
                     self.base_image = self._create_test_pattern()
             else:
-                print(f"Base image not found at: {self.base_image_path}")
-                print("Creating enhanced test pattern instead")
+                print(f"Base image not found: {self.base_image_path}")
                 self.base_image = self._create_test_pattern()
         except Exception as e:
             print(f"Error loading base image: {e}")
-            print("Falling back to enhanced test pattern")
             self.base_image = self._create_test_pattern()
     
     def _create_test_pattern(self) -> np.ndarray:
-        """Create an enhanced test pattern that shows clear MTF effects"""
-        # Create a high-resolution pattern with multiple spatial frequencies
-        height, width = 800, 800
+        """Create a test pattern if base image is not available"""
+        # Create a simple Gabor-like pattern for testing
+        height, width = 400, 400
+        y, x = np.ogrid[:height, :width]
         
-        # Create multiple patterns combined
-        # 1. High-frequency checkerboard
-        checker_size = 8
-        x, y = np.meshgrid(np.arange(width), np.arange(height))
-        checker = ((x // checker_size) + (y // checker_size)) % 2
+        # Create sinusoidal grating
+        frequency = 0.1
+        pattern = np.sin(2 * np.pi * frequency * x) * np.cos(2 * np.pi * frequency * y)
         
-        # 2. Radial grating for different spatial frequencies
-        center_x, center_y = width // 2, height // 2
-        r = np.sqrt((x - center_x)**2 + (y - center_y)**2)
-        radial = np.sin(r * 0.1) * 0.5 + 0.5
-        
-        # 3. Text-like pattern for realistic MTF testing
-        text_pattern = np.zeros((height, width))
-        # Create vertical and horizontal lines at different frequencies
-        for i in range(0, width, 20):
-            text_pattern[:, i:i+2] = 1
-        for i in range(0, height, 15):
-            text_pattern[i:i+2, :] = 1
-        
-        # Combine patterns
-        combined = (checker * 0.4 + radial * 0.3 + text_pattern * 0.3)
-        
-        # Normalize to 0-255 range with good contrast
-        pattern_normalized = (combined * 255).astype(np.uint8)
+        # Normalize to 0-255 range
+        pattern = ((pattern + 1) * 127.5).astype(np.uint8)
         
         # Convert to RGB
-        rgb_pattern = np.stack([pattern_normalized, pattern_normalized, pattern_normalized], axis=-1)
+        rgb_pattern = np.stack([pattern, pattern, pattern], axis=-1)
         
-        print(f"Created enhanced test pattern: {rgb_pattern.shape}")
         return rgb_pattern
     
     def _initialize_ado_engine(self):
