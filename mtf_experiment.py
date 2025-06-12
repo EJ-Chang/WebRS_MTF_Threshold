@@ -24,11 +24,26 @@ except ImportError as e:
     
     # Fallback implementations for web interface
     def apply_mtf_to_image(image, mtf_percent):
-        """Fallback MTF implementation using simple Gaussian blur"""
+        """Enhanced MTF implementation with more noticeable effects"""
         import cv2
-        # Simple approximation: lower MTF = more blur
-        sigma = (100 - mtf_percent) / 20.0  # Convert MTF% to blur amount
-        return cv2.GaussianBlur(image, (0, 0), sigmaX=sigma, sigmaY=sigma)
+        # More aggressive MTF mapping for clearer perceptual differences
+        # Lower MTF values should produce significantly more blur
+        if mtf_percent >= 90:
+            sigma = 0.5  # Minimal blur for high MTF
+        elif mtf_percent >= 70:
+            sigma = 1.5 + (90 - mtf_percent) * 0.2  # Gradual increase
+        elif mtf_percent >= 50:
+            sigma = 5.5 + (70 - mtf_percent) * 0.3  # More noticeable blur
+        elif mtf_percent >= 30:
+            sigma = 11.5 + (50 - mtf_percent) * 0.4  # Strong blur
+        else:
+            sigma = 19.5 + (30 - mtf_percent) * 0.5  # Very strong blur
+        
+        # Apply Gaussian blur
+        blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=sigma, sigmaY=sigma)
+        
+        print(f"Applied MTF {mtf_percent:.1f}% with sigma={sigma:.2f}")
+        return blurred
     
     def load_and_prepare_image(path, use_right_half=True):
         """Fallback image loading"""

@@ -889,9 +889,20 @@ def mtf_trial_screen():
             pattern_rgb = np.stack([pattern, pattern, pattern], axis=-1)
             st.session_state.cached_pattern = pattern_rgb
         
-        # Apply MTF filter efficiently
+        # Apply MTF filter with enhanced mapping for visible effects
         base_pattern = st.session_state.cached_pattern.copy()
-        sigma = ((100 - mtf_value) / 100.0) * 6.0  # Reduced max sigma for performance
+        
+        # Use same enhanced MTF mapping as in mtf_experiment.py
+        if mtf_value >= 90:
+            sigma = 0.5  # Minimal blur for high MTF
+        elif mtf_value >= 70:
+            sigma = 1.5 + (90 - mtf_value) * 0.2  # Gradual increase
+        elif mtf_value >= 50:
+            sigma = 5.5 + (70 - mtf_value) * 0.3  # More noticeable blur
+        elif mtf_value >= 30:
+            sigma = 11.5 + (50 - mtf_value) * 0.4  # Strong blur
+        else:
+            sigma = 19.5 + (30 - mtf_value) * 0.5  # Very strong blur
         
         if sigma > 0.1:
             blurred = cv2.GaussianBlur(base_pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
@@ -901,9 +912,18 @@ def mtf_trial_screen():
         # Use new display function
         display_fullscreen_image(
             blurred, 
-            caption=f"測試圖案 MTF {mtf_value:.1f}% (σ={sigma:.2f})",
+            caption=f"測試圖案 MTF {mtf_value:.1f}% (模糊參數σ={sigma:.2f})",
             mtf_value=mtf_value
         )
+        
+        # Debug: Show MTF effect comparison if requested
+        if st.session_state.get('show_mtf_debug', False):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(base_pattern, caption="原始圖案", width=300)
+            with col2:
+                st.image(blurred, caption=f"MTF {mtf_value:.1f}% 處理後", width=300)
+            st.info(f"模糊強度: σ={sigma:.2f} - MTF值越低，模糊越明顯")
     
     # Response buttons
     st.markdown("### Your Response:")
@@ -919,6 +939,12 @@ def mtf_trial_screen():
     
     # Keyboard shortcuts
     st.markdown("*Use keyboard: **Y** for Clear, **N** for Not Clear*")
+    
+    # MTF Debug toggle
+    if st.checkbox("顯示MTF效果對比 (調試用)", key="mtf_debug_toggle"):
+        st.session_state.show_mtf_debug = True
+    else:
+        st.session_state.show_mtf_debug = False
 
 def record_mtf_response(trial_data, is_clear):
     """Record MTF trial response"""
