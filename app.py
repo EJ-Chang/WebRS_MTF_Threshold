@@ -80,15 +80,23 @@ def display_fullscreen_image(image_data, caption="", mtf_value=None):
     # 根據視窗大小智能裁切中心區域，保持 1:1 像素比例
     h, w = image_array.shape[:2]
     
-    # 設定最大顯示尺寸 (適應網頁視窗)
-    max_display_width = 800
-    max_display_height = 600
+    # 最大化利用畫布空間，優先保持原始尺寸
+    # 只有在圖片過大時才裁切
+    max_display_width = 1400  # 增大最大寬度
+    max_display_height = 1000  # 增大最大高度
     
     # 計算需要裁切的尺寸，保持中心位置
     if w > max_display_width or h > max_display_height:
-        # 需要裁切
-        crop_width = min(w, max_display_width)
-        crop_height = min(h, max_display_height)
+        # 需要裁切時，盡可能保持更大的尺寸
+        if w > max_display_width:
+            crop_width = max_display_width
+        else:
+            crop_width = w
+            
+        if h > max_display_height:
+            crop_height = max_display_height
+        else:
+            crop_height = h
         
         # 計算中心裁切座標
         start_x = (w - crop_width) // 2
@@ -97,7 +105,7 @@ def display_fullscreen_image(image_data, caption="", mtf_value=None):
         # 裁切中心區域
         processed_img = image_array[start_y:start_y + crop_height, start_x:start_x + crop_width]
     else:
-        # 圖片已經適合顯示尺寸
+        # 圖片尺寸適合，直接使用
         processed_img = image_array
     
     # Convert to PIL for display
@@ -108,12 +116,12 @@ def display_fullscreen_image(image_data, caption="", mtf_value=None):
     img_pil.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
     
-    # Display using HTML with 1:1 pixel ratio
+    # Display using HTML with maximum canvas utilization
     html_content = f"""
-    <div style="text-align: center; margin: 20px 0;">
+    <div style="text-align: center; margin: 0; padding: 0; width: 100%; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
         <img src="data:image/png;base64,{img_str}" 
-             style="max-width: 100%; height: auto; border: 2px solid #333; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">
-        <p style="margin-top: 10px; font-size: 14px; color: #666;">{caption}</p>
+             style="max-width: 100vw; max-height: 90vh; width: auto; height: auto; object-fit: contain; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">
+        <p style="margin: 5px 0 0 0; font-size: 12px; color: #666; position: absolute; bottom: 10px;">{caption}</p>
     </div>
     """
     st.markdown(html_content, unsafe_allow_html=True)
@@ -157,14 +165,30 @@ def display_ado_monitor(exp_manager, trial_number):
             else:
                 st.info("🔄 學習中")
                 
-            # Show recent trials if available
+            # Show detailed trial history
             if hasattr(exp_manager, 'trial_data') and len(exp_manager.trial_data) > 0:
+                st.markdown("**試驗歷史:**")
                 recent_trials = exp_manager.trial_data[-5:]  # Last 5 trials
-                st.markdown("**最近試驗:**")
-                for i, trial in enumerate(recent_trials):
-                    mtf = trial.get('mtf_value', 0)
-                    response = "清楚" if trial.get('response', False) else "不清楚"
-                    st.text(f"MTF {mtf:.1f}% → {response}")
+                for trial in recent_trials:
+                    response_text = "✓ 清晰" if trial.get('response', False) else "✗ 不清晰"
+                    rt = trial.get('reaction_time', 0)
+                    st.text(f"T{trial.get('trial_number', 0)}: {trial.get('mtf_value', 0):.1f}% → {response_text} ({rt:.1f}s)")
+            
+            # ADO optimization details
+            st.markdown("**優化詳情:**")
+            if hasattr(exp_manager, 'ado_engine') and exp_manager.ado_engine:
+                try:
+                    entropy = exp_manager.get_ado_entropy()
+                    st.metric("後驗熵值", f"{entropy:.3f}")
+                    st.caption("熵值越低 = 不確定性越小")
+                except:
+                    st.caption("計算優化指標中...")
+            
+            # Parameter evolution
+            if trial_number > 3:
+                st.markdown("**參數收斂:**")
+                st.caption(f"閾值: {estimates.get('threshold_mean', 0):.1f}% (±{estimates.get('threshold_sd', 0):.1f})")
+                st.caption(f"斜率: {estimates.get('slope_mean', 0):.2f} (±{estimates.get('slope_sd', 0):.2f})")
                     
     except Exception as e:
         st.sidebar.error(f"ADO監控錯誤: {str(e)}")
@@ -869,15 +893,45 @@ def mtf_trial_screen():
     # Display trial information
     st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
     
-    # Show current estimates if available
+    # Show detailed ADO parameters and optimization status
     if current_trial['trial_number'] > 1:
         estimates = exp_manager.get_current_estimates()
-        if not np.isnan(estimates['threshold_mean']):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Estimated Threshold", f"{estimates['threshold_mean']:.1f}% MTF")
-            with col2:
-                st.metric("Uncertainty", f"±{estimates['threshold_sd']:.1f}")
+        
+        # Main parameter estimates
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("閾值估計", f"{estimates.get('threshold_mean', 0):.1f}% MTF")
+        with col2:
+            st.metric("閾值不確定性", f"±{estimates.get('threshold_sd', 0):.1f}")
+        with col3:
+            st.metric("斜率估計", f"{estimates.get('slope_mean', 0):.2f}")
+        with col4:
+            st.metric("斜率不確定性", f"±{estimates.get('slope_sd', 0):.2f}")
+        
+        # Additional ADO information
+        st.markdown("**ADO 優化狀態:**")
+        ado_col1, ado_col2, ado_col3 = st.columns(3)
+        
+        with ado_col1:
+            # Information gain from last trial
+            if hasattr(exp_manager, 'ado_engine') and exp_manager.ado_engine:
+                try:
+                    entropy = exp_manager.get_ado_entropy()
+                    st.metric("後驗熵值", f"{entropy:.3f}")
+                except:
+                    st.metric("後驗熵值", "計算中...")
+            else:
+                st.metric("後驗熵值", "N/A")
+        
+        with ado_col2:
+            # Convergence status
+            uncertainty = estimates.get('threshold_sd', 20)
+            convergence_progress = max(0, min(100, (20 - uncertainty) / 15 * 100))
+            st.metric("收斂進度", f"{convergence_progress:.0f}%")
+        
+        with ado_col3:
+            # Expected information gain for current trial
+            st.metric("當前 MTF", f"{current_trial['mtf_value']:.1f}%")
     
     st.markdown("---")
     
