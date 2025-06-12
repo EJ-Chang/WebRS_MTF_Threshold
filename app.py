@@ -10,14 +10,138 @@ import plotly.express as px
 from experiment import ExperimentManager
 from data_manager import DataManager
 from mtf_experiment import MTFExperimentManager
+import cv2
+from PIL import Image
+import base64
+from io import BytesIO
 
 # Configure page
 st.set_page_config(
     page_title="Psychophysics 2AFC Experiment",
     page_icon="🧠",
-    layout="centered",
+    layout="wide",  # Changed to wide for better image display
     initial_sidebar_state="collapsed"
 )
+
+def crop_image_to_viewport(image_array, target_width=800, target_height=600):
+    """
+    Crop image to fit viewport while maintaining aspect ratio and centering
+    """
+    if image_array is None:
+        return None
+    
+    h, w = image_array.shape[:2]
+    
+    # Calculate aspect ratios
+    img_aspect = w / h
+    target_aspect = target_width / target_height
+    
+    if img_aspect > target_aspect:
+        # Image is wider than target, crop width
+        new_width = int(h * target_aspect)
+        start_x = (w - new_width) // 2
+        cropped = image_array[:, start_x:start_x + new_width]
+    else:
+        # Image is taller than target, crop height
+        new_height = int(w / target_aspect)
+        start_y = (h - new_height) // 2
+        cropped = image_array[start_y:start_y + new_height, :]
+    
+    # Resize to target dimensions
+    resized = cv2.resize(cropped, (target_width, target_height))
+    return resized
+
+def display_fullscreen_image(image_data, caption="", mtf_value=None):
+    """
+    Display image in fullscreen mode with proper sizing
+    """
+    if image_data is None:
+        return
+    
+    # If image_data is base64 string, decode it
+    if isinstance(image_data, str) and image_data.startswith('data:image'):
+        # Extract base64 data
+        base64_data = image_data.split(',')[1]
+        img_bytes = base64.b64decode(base64_data)
+        img = Image.open(BytesIO(img_bytes))
+        image_array = np.array(img)
+    else:
+        image_array = image_data
+    
+    # Crop to optimal viewing size
+    processed_img = crop_image_to_viewport(image_array, target_width=900, target_height=600)
+    
+    if processed_img is not None:
+        # Convert back to PIL for display
+        img_pil = Image.fromarray(processed_img)
+        
+        # Convert to base64 for HTML display
+        buffer = BytesIO()
+        img_pil.save(buffer, format='PNG')
+        img_str = base64.b64encode(buffer.getvalue()).decode()
+        
+        # Display using HTML for better control
+        html_content = f"""
+        <div style="text-align: center; margin: 20px 0;">
+            <img src="data:image/png;base64,{img_str}" 
+                 style="max-width: 100%; height: auto; border: 2px solid #333; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
+            <p style="margin-top: 10px; font-size: 14px; color: #666;">{caption}</p>
+        </div>
+        """
+        st.markdown(html_content, unsafe_allow_html=True)
+    else:
+        st.error("無法處理圖片")
+
+def display_ado_monitor(exp_manager, trial_number):
+    """
+    Display ADO monitoring information in a sidebar or expander
+    """
+    if not hasattr(exp_manager, 'ado_engine') or exp_manager.ado_engine is None:
+        return
+    
+    try:
+        estimates = exp_manager.get_current_estimates()
+        
+        # Create monitoring display
+        with st.sidebar:
+            st.markdown("### 🔬 ADO 監控")
+            st.markdown("---")
+            
+            # Current estimates
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("閾值估計", f"{estimates.get('threshold_mean', 0):.1f}%")
+            with col2:
+                st.metric("不確定性", f"±{estimates.get('threshold_sd', 0):.1f}")
+            
+            # Progress indicators
+            st.markdown("**學習進度:**")
+            uncertainty = estimates.get('threshold_sd', 20)
+            progress = max(0, min(1, (20 - uncertainty) / 15))  # Normalize uncertainty to progress
+            st.progress(progress)
+            
+            # Trial information
+            st.markdown(f"**試驗次數:** {trial_number}")
+            
+            # Convergence status
+            if uncertainty < 5:
+                st.success("✅ 高精度")
+            elif uncertainty < 10:
+                st.warning("⚡ 中等精度")
+            else:
+                st.info("🔄 學習中")
+                
+            # Show recent trials if available
+            if hasattr(exp_manager, 'trial_data') and len(exp_manager.trial_data) > 0:
+                recent_trials = exp_manager.trial_data[-5:]  # Last 5 trials
+                st.markdown("**最近試驗:**")
+                for i, trial in enumerate(recent_trials):
+                    mtf = trial.get('mtf_value', 0)
+                    response = "清楚" if trial.get('response', False) else "不清楚"
+                    st.text(f"MTF {mtf:.1f}% → {response}")
+                    
+    except Exception as e:
+        st.sidebar.error(f"ADO監控錯誤: {str(e)}")
 
 def plot_psychometric_function(trial_data):
     """Generate and display psychometric function from participant data"""
@@ -226,19 +350,29 @@ def welcome_screen():
             st.session_state.experiment_type = experiment_type
             
             if experiment_type == "Brightness Discrimination (2AFC)":
+                # Ensure variables are defined with defaults
+                num_trials_val = locals().get('num_trials', 30)
+                num_practice_trials_val = locals().get('num_practice_trials', 5)
+                inter_trial_interval_val = locals().get('inter_trial_interval', 1.0)
+                
                 st.session_state.experiment_manager = ExperimentManager(
-                    num_trials=num_trials if 'num_trials' in locals() else 30,
-                    num_practice_trials=num_practice_trials if 'num_practice_trials' in locals() else 5,
+                    num_trials=num_trials_val,
+                    num_practice_trials=num_practice_trials_val,
                     stimulus_duration=stimulus_duration,
-                    inter_trial_interval=inter_trial_interval if 'inter_trial_interval' in locals() else 1.0,
+                    inter_trial_interval=inter_trial_interval_val,
                     participant_id=st.session_state.participant_id,
                     use_ado=use_ado
                 )
             else:
+                # Ensure variables are defined with defaults
+                max_trials_val = locals().get('max_trials', 50)
+                min_trials_val = locals().get('min_trials', 15)
+                convergence_threshold_val = locals().get('convergence_threshold', 0.15)
+                
                 st.session_state.mtf_experiment_manager = MTFExperimentManager(
-                    max_trials=max_trials if 'max_trials' in locals() else 50,
-                    min_trials=min_trials if 'min_trials' in locals() else 15,
-                    convergence_threshold=convergence_threshold if 'convergence_threshold' in locals() else 0.15,
+                    max_trials=max_trials_val,
+                    min_trials=min_trials_val,
+                    convergence_threshold=convergence_threshold_val,
                     participant_id=st.session_state.participant_id
                 )
                 st.session_state.stimulus_duration = stimulus_duration
@@ -725,43 +859,52 @@ def mtf_trial_screen():
     st.subheader("Is this image clear?")
     st.caption(f"MTF Value: {current_trial['mtf_value']:.1f}%")
     
-    # Show the stimulus image
+    # Display ADO monitoring in sidebar
+    display_ado_monitor(exp_manager, current_trial['trial_number'])
+    
+    # Show the stimulus image with improved display
     if current_trial['stimulus_image']:
-        # Display at actual size (1:1) without width constraint
-        st.image(current_trial['stimulus_image'], caption=f"Judge the clarity of this image (MTF: {current_trial['mtf_value']:.1f}%)")
+        # Use new fullscreen display function
+        display_fullscreen_image(
+            current_trial['stimulus_image'], 
+            caption=f"判斷此圖片的清晰度 (MTF: {current_trial['mtf_value']:.1f}%)",
+            mtf_value=current_trial['mtf_value']
+        )
     else:
-        # Create a high-contrast test pattern that clearly shows MTF effects
-        import cv2
-        
-        # Create a high-resolution checkerboard pattern
-        pattern_size = 512
-        checker_size = 16
-        pattern = np.zeros((pattern_size, pattern_size), dtype=np.uint8)
-        
-        # Create checkerboard
-        for i in range(0, pattern_size, checker_size):
-            for j in range(0, pattern_size, checker_size):
-                if (i // checker_size + j // checker_size) % 2 == 0:
-                    pattern[i:i+checker_size, j:j+checker_size] = 255
-        
-        # Convert to RGB
-        pattern_rgb = np.stack([pattern, pattern, pattern], axis=-1)
-        
-        # Apply MTF filter with enhanced blur effect
+        # Create optimized test pattern without performance bottlenecks
         mtf_value = current_trial['mtf_value']
-        # More aggressive blur for lower MTF values
-        sigma = ((100 - mtf_value) / 100.0) * 8.0  # Scale sigma from 0 to 8
+        
+        # Pre-generate pattern once and cache it
+        if 'cached_pattern' not in st.session_state:
+            # Create high-resolution checkerboard pattern
+            pattern_size = 800
+            checker_size = 20
+            pattern = np.zeros((pattern_size, pattern_size), dtype=np.uint8)
+            
+            # Vectorized checkerboard creation for better performance
+            x, y = np.meshgrid(np.arange(pattern_size), np.arange(pattern_size))
+            checker_mask = ((x // checker_size) + (y // checker_size)) % 2 == 0
+            pattern[checker_mask] = 255
+            
+            # Convert to RGB
+            pattern_rgb = np.stack([pattern, pattern, pattern], axis=-1)
+            st.session_state.cached_pattern = pattern_rgb
+        
+        # Apply MTF filter efficiently
+        base_pattern = st.session_state.cached_pattern.copy()
+        sigma = ((100 - mtf_value) / 100.0) * 6.0  # Reduced max sigma for performance
         
         if sigma > 0.1:
-            blurred = cv2.GaussianBlur(pattern_rgb, (0, 0), sigmaX=sigma, sigmaY=sigma)
+            blurred = cv2.GaussianBlur(base_pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
         else:
-            blurred = pattern_rgb
+            blurred = base_pattern
         
-        # Display at actual size
-        st.image(blurred, caption=f"Test pattern with {mtf_value:.1f}% MTF (sigma: {sigma:.2f})")
-        
-        # Show MTF effect info
-        st.info(f"MTF {mtf_value:.1f}% applied with Gaussian blur (σ={sigma:.2f}). Lower MTF = more blur.")
+        # Use new display function
+        display_fullscreen_image(
+            blurred, 
+            caption=f"測試圖案 MTF {mtf_value:.1f}% (σ={sigma:.2f})",
+            mtf_value=mtf_value
+        )
     
     # Response buttons
     st.markdown("### Your Response:")
@@ -796,16 +939,15 @@ def record_mtf_response(trial_data, is_clear):
     st.session_state.mtf_trial_start_time = None
     
     # Show feedback
-    response_text = "Clear" if is_clear else "Not Clear"
-    st.success(f"Response recorded: {response_text} (RT: {reaction_time:.2f}s)")
+    response_text = "清楚" if is_clear else "不清楚"
+    st.success(f"回應已記錄: {response_text} (反應時間: {reaction_time:.2f}秒)")
     
     # Check if converged
     if trial_result.get('converged', False):
         estimates = exp_manager.get_current_estimates()
-        st.info(f"Experiment converged! Estimated threshold: {estimates['threshold_mean']:.1f}% MTF")
+        st.info(f"實驗已收斂! 估計閾值: {estimates['threshold_mean']:.1f}% MTF")
     
-    # Auto-advance
-    time.sleep(st.session_state.get('stimulus_duration', 1.0))
+    # Auto-advance immediately (removed sleep for better performance)
     st.rerun()
 
 def mtf_results_screen():
