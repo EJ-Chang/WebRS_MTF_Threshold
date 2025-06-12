@@ -892,9 +892,14 @@ def mtf_trial_screen():
         
         # Apply MTF filter efficiently
         base_pattern = st.session_state.cached_pattern.copy()
-        sigma = ((100 - mtf_value) / 100.0) * 6.0  # Reduced max sigma for performance
         
-        if sigma > 0.1:
+        # 正確的 MTF 轉換：MTF 值越低，模糊程度越高
+        # MTF 100% = 無模糊 (sigma=0)
+        # MTF 0% = 最大模糊 (sigma=10)
+        sigma = ((100 - mtf_value) / 100.0) * 10.0
+        
+        # 確保 sigma 不會太小，避免無效果
+        if sigma > 0.5:
             blurred = cv2.GaussianBlur(base_pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
         else:
             blurred = base_pattern
