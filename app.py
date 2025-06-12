@@ -853,7 +853,7 @@ def save_experiment_data(trial_result, is_practice=False):
                 trial_result['is_correct'] = trial_result['response'] == expected
         
         # Save trial to database
-        db.save_trial(experiment_id, trial_result)
+        db.save_trial(int(experiment_id), trial_result)
         
         # Update session state for tracking
         if 'saved_trials' not in st.session_state:

@@ -106,6 +106,7 @@ class DatabaseManager:
             )
             session.add(experiment)
             session.commit()
+            session.refresh(experiment)
             return experiment.id
         finally:
             session.close()
