@@ -853,7 +853,7 @@ def save_experiment_data(trial_result, is_practice=False):
                 trial_result['is_correct'] = trial_result['response'] == expected
         
         # Save trial to database
-        db.save_trial(int(experiment_id), trial_result)
+        db.save_trial(experiment_id, trial_result)
         
         # Update session state for tracking
         if 'saved_trials' not in st.session_state:
@@ -991,16 +991,17 @@ def mtf_trial_screen():
             </div>
             """, unsafe_allow_html=True)
         
-        # Add a button to continue manually instead of auto-transition
+        # Automatic transition after 1 second
         if elapsed >= 1.0:
-            if st.button("Continue to Stimulus", type="primary", use_container_width=True):
-                st.session_state.mtf_trial_phase = 'stimulus'
-                st.session_state.mtf_stimulus_onset_time = time.time()
-                st.rerun()
+            st.session_state.mtf_trial_phase = 'stimulus'
+            st.session_state.mtf_stimulus_onset_time = time.time()
+            st.rerun()
         else:
             # Show progress indicator
             progress = elapsed / 1.0
             st.progress(progress)
+            # Auto-refresh to check timing
+            st.rerun()
     
     elif st.session_state.mtf_trial_phase == 'stimulus':
         # Stimulus phase (show image, wait 1 second before allowing response)
