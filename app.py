@@ -10,6 +10,7 @@ import plotly.express as px
 from experiment import ExperimentManager
 from data_manager import DataManager
 from mtf_experiment import MTFExperimentManager
+from database import DatabaseManager
 import cv2
 from PIL import Image
 import base64
@@ -810,46 +811,57 @@ def run_trial(is_practice=False):
 
 
 def save_experiment_data(trial_result, is_practice=False):
-    """Save experiment data to local storage after each trial"""
+    """Save experiment data to database"""
     try:
-        # Ensure data_storage directory exists
-        os.makedirs('data_storage', exist_ok=True)
+        if 'db_manager' not in st.session_state:
+            st.session_state.db_manager = DatabaseManager()
         
-        # Generate filename with timestamp and participant ID
-        participant_id = st.session_state.get('participant_id', 'unknown')
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        experiment_type = st.session_state.get('experiment_type', 'unknown')
+        db = st.session_state.db_manager
         
-        # Create filename
-        if is_practice:
-            filename = f"practice_{participant_id}_{timestamp}.csv"
-        else:
-            filename = f"{experiment_type.lower().replace(' ', '_')}_{participant_id}_{timestamp}.csv"
-        
-        filepath = os.path.join('data_storage', filename)
-        
-        # Convert trial result to DataFrame
-        df_new = pd.DataFrame([trial_result])
-        
-        # Append to existing file or create new one
-        if os.path.exists(filepath):
-            df_existing = pd.read_csv(filepath)
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-        else:
-            df_combined = df_new
-        
-        # Save to CSV
-        df_combined.to_csv(filepath, index=False)
-        
-        # Store filepath in session state for user reference
-        if 'data_files' not in st.session_state:
-            st.session_state.data_files = []
-        
-        if filepath not in st.session_state.data_files:
-            st.session_state.data_files.append(filepath)
+        # Get current experiment ID from session
+        experiment_id = st.session_state.get('current_experiment_id')
+        if not experiment_id:
+            # Create new experiment if not exists
+            participant_id = st.session_state.get('participant_id', 'unknown')
+            experiment_type = st.session_state.get('experiment_type', 'unknown')
             
+            # Get experiment parameters
+            exp_manager = st.session_state.get('experiment_manager')
+            if exp_manager:
+                experiment_id = db.create_experiment(
+                    participant_id=participant_id,
+                    experiment_type=experiment_type,
+                    use_ado=exp_manager.use_ado,
+                    num_trials=exp_manager.num_trials,
+                    num_practice_trials=exp_manager.num_practice_trials,
+                    stimulus_duration=exp_manager.stimulus_duration,
+                    inter_trial_interval=exp_manager.inter_trial_interval
+                )
+            else:
+                experiment_id = db.create_experiment(
+                    participant_id=participant_id,
+                    experiment_type=experiment_type
+                )
+            
+            st.session_state.current_experiment_id = experiment_id
+        
+        # Calculate derived fields
+        if 'left_stimulus' in trial_result and 'right_stimulus' in trial_result:
+            trial_result['stimulus_difference'] = abs(trial_result['left_stimulus'] - trial_result['right_stimulus'])
+            if trial_result['response'] in ['left', 'right']:
+                expected = 'left' if trial_result['left_stimulus'] > trial_result['right_stimulus'] else 'right'
+                trial_result['is_correct'] = trial_result['response'] == expected
+        
+        # Save trial to database
+        db.save_trial(experiment_id, trial_result)
+        
+        # Update session state for tracking
+        if 'saved_trials' not in st.session_state:
+            st.session_state.saved_trials = 0
+        st.session_state.saved_trials += 1
+        
     except Exception as e:
-        st.error(f"Error saving data: {str(e)}")
+        st.error(f"Error saving data to database: {str(e)}")
 
 def record_response(response, trial_data, is_practice=False):
     """Record participant response and reaction time"""
