@@ -938,16 +938,17 @@ def mtf_trial_screen():
         st.rerun()
         return
     
-    # Initialize trial state with fixation and timing
+    # Initialize trial state - only once per session
     if 'mtf_current_trial' not in st.session_state:
         st.session_state.mtf_current_trial = None
-        st.session_state.mtf_trial_phase = 'fixation'  # fixation -> stimulus -> response
+        st.session_state.mtf_trial_phase = 'get_trial'
         st.session_state.mtf_phase_start_time = None
         st.session_state.mtf_stimulus_onset_time = None
         st.session_state.mtf_awaiting_response = False
     
-    # Get current trial
-    if st.session_state.mtf_current_trial is None:
+    # State machine for MTF trials
+    if st.session_state.mtf_trial_phase == 'get_trial':
+        # Get next trial
         current_trial = exp_manager.get_next_trial()
         if current_trial is None:
             st.session_state.experiment_stage = 'mtf_results'
@@ -958,13 +959,11 @@ def mtf_trial_screen():
         st.session_state.mtf_trial_phase = 'fixation'
         st.session_state.mtf_phase_start_time = time.time()
         st.rerun()
-    else:
-        current_trial = st.session_state.mtf_current_trial
+        return
     
-    # Safety check
+    current_trial = st.session_state.mtf_current_trial
     if current_trial is None:
-        st.error("Trial data error")
-        st.session_state.experiment_stage = 'mtf_results'
+        st.session_state.mtf_trial_phase = 'get_trial'
         st.rerun()
         return
     
@@ -977,49 +976,31 @@ def mtf_trial_screen():
             st.session_state.mtf_phase_start_time = current_time
         
         elapsed = current_time - st.session_state.mtf_phase_start_time
-        if elapsed < 1.0:
-            # Show centered fixation cross replacing all content
+        
+        # Show fixation cross in the main content area instead of overlay
+        st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
+        st.markdown("---")
+        
+        # Centered fixation cross
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
             st.markdown("""
-            <style>
-                .fixation-container {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100vw;
-                    height: 100vh;
-                    background-color: #f0f0f0;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    z-index: 9999;
-                }
-                .fixation-cross {
-                    font-size: 120px;
-                    font-weight: bold;
-                    color: #333;
-                    user-select: none;
-                }
-            </style>
-            <div class="fixation-container">
-                <div class="fixation-cross">+</div>
+            <div style="text-align: center; padding: 100px 0;">
+                <div style="font-size: 120px; font-weight: bold; color: #333;">+</div>
+                <div style="font-size: 18px; color: #666; margin-top: 20px;">Get ready...</div>
             </div>
             """, unsafe_allow_html=True)
-            
-            # Auto-refresh without sleep to prevent blocking
-            if elapsed >= 0.8:  # Start transition slightly early for smoother experience
+        
+        # Add a button to continue manually instead of auto-transition
+        if elapsed >= 1.0:
+            if st.button("Continue to Stimulus", type="primary", use_container_width=True):
                 st.session_state.mtf_trial_phase = 'stimulus'
-                st.session_state.mtf_stimulus_onset_time = current_time
-                st.session_state.mtf_phase_start_time = current_time
+                st.session_state.mtf_stimulus_onset_time = time.time()
                 st.rerun()
-            else:
-                # Use meta refresh for smooth timing
-                st.markdown(f'<meta http-equiv="refresh" content="0.2">', unsafe_allow_html=True)
         else:
-            # Move to stimulus phase
-            st.session_state.mtf_trial_phase = 'stimulus'
-            st.session_state.mtf_stimulus_onset_time = current_time
-            st.session_state.mtf_phase_start_time = current_time
-            st.rerun()
+            # Show progress indicator
+            progress = elapsed / 1.0
+            st.progress(progress)
     
     elif st.session_state.mtf_trial_phase == 'stimulus':
         # Stimulus phase (show image, wait 1 second before allowing response)
@@ -1061,16 +1042,9 @@ def mtf_trial_screen():
                 mtf_value=mtf_value
             )
         
-        # Check if 1 second has passed since stimulus onset
-        if elapsed_since_onset >= 1.0:
-            st.session_state.mtf_trial_phase = 'response'
-            st.rerun()
-        else:
-            # Show countdown without blocking sleep
-            remaining = 1.0 - elapsed_since_onset
-            st.info(f"Please wait {remaining:.1f}s before responding...")
-            # Use meta refresh for smooth countdown
-            st.markdown(f'<meta http-equiv="refresh" content="0.1">', unsafe_allow_html=True)
+        # Allow immediate response - remove forced delay
+        st.session_state.mtf_trial_phase = 'response'
+        st.rerun()
     
     elif st.session_state.mtf_trial_phase == 'response':
         # Response phase - show buttons and ADO feedback
@@ -1184,17 +1158,15 @@ def record_mtf_response(trial_data, is_clear):
     
     # Reset trial state for next trial
     st.session_state.mtf_current_trial = None
-    st.session_state.mtf_trial_phase = 'fixation'
+    st.session_state.mtf_trial_phase = 'get_trial'
     st.session_state.mtf_phase_start_time = None
     st.session_state.mtf_stimulus_onset_time = None
     st.session_state.mtf_awaiting_response = False
     
-    # Continue to next trial with smooth transition
-    st.markdown("**Continuing to next trial...**")
-    st.session_state.mtf_feedback_shown = True
-    st.session_state.mtf_feedback_start = time.time()
-    # Use shorter delay for better user experience
-    st.markdown(f'<meta http-equiv="refresh" content="1.5">', unsafe_allow_html=True)
+    # Continue to next trial
+    st.success("Response recorded! Moving to next trial...")
+    if st.button("Continue", type="primary"):
+        st.rerun()
 
 def mtf_results_screen():
     """Display MTF experiment results"""
@@ -1416,6 +1388,12 @@ def main():
         st.session_state.trial_locked = False
     if 'show_feedback' not in st.session_state:
         st.session_state.show_feedback = False
+    
+    # Initialize MTF-specific session state
+    if 'mtf_experiment_initialized' not in st.session_state:
+        st.session_state.mtf_experiment_initialized = False
+    if 'mtf_trial_phase' not in st.session_state:
+        st.session_state.mtf_trial_phase = 'fixation'
     
     # Show data storage info in sidebar
     show_data_storage_info()
