@@ -683,6 +683,18 @@ def run_trial(is_practice=False):
     """Run a single trial"""
     exp_manager = st.session_state.experiment_manager
     
+    # Handle feedback display phase
+    if st.session_state.get('show_feedback', False):
+        if time.time() - st.session_state.get('feedback_start_time', 0) >= st.session_state.get('feedback_duration', 1.0):
+            # Feedback period is over, clear it and continue
+            st.session_state.show_feedback = False
+            st.session_state.feedback_start_time = None
+            st.session_state.feedback_duration = None
+            st.rerun()
+        else:
+            # Still showing feedback, don't display new trial yet
+            return
+    
     # Check if we need to generate a new trial or use the locked one
     if not st.session_state.trial_locked or st.session_state.current_trial_data is None:
         # Get new trial data and lock it
@@ -842,8 +854,10 @@ def record_response(response, trial_data, is_practice=False):
         st.error(f"✗ Your response: {response.upper()}, Correct: {expected_correct.upper()} (RT: {reaction_time:.2f}s)")
         st.write(f"Left brightness: {left_val:.3f}, Right brightness: {right_val:.3f}")
     
-    # Auto-advance after brief delay
-    time.sleep(exp_manager.inter_trial_interval)
+    # Use session state for smoother transitions instead of sleep
+    st.session_state.show_feedback = True
+    st.session_state.feedback_start_time = time.time()
+    st.session_state.feedback_duration = min(exp_manager.inter_trial_interval, 1.5)  # Cap at 1.5s
     st.rerun()
 
 # MTF Experiment Functions
@@ -903,14 +917,42 @@ def mtf_trial_screen():
         
         elapsed = current_time - st.session_state.mtf_phase_start_time
         if elapsed < 1.0:
-            # Show fixation cross
+            # Show centered fixation cross replacing all content
             st.markdown("""
-            <div style="display: flex; justify-content: center; align-items: center; height: 80vh; font-size: 100px; font-weight: bold;">
-                +
+            <style>
+                .fixation-container {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    background-color: #f0f0f0;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 9999;
+                }
+                .fixation-cross {
+                    font-size: 120px;
+                    font-weight: bold;
+                    color: #333;
+                    user-select: none;
+                }
+            </style>
+            <div class="fixation-container">
+                <div class="fixation-cross">+</div>
             </div>
             """, unsafe_allow_html=True)
-            time.sleep(0.1)
-            st.rerun()
+            
+            # Auto-refresh without sleep to prevent blocking
+            if elapsed >= 0.8:  # Start transition slightly early for smoother experience
+                st.session_state.mtf_trial_phase = 'stimulus'
+                st.session_state.mtf_stimulus_onset_time = current_time
+                st.session_state.mtf_phase_start_time = current_time
+                st.rerun()
+            else:
+                # Use meta refresh for smooth timing
+                st.markdown(f'<meta http-equiv="refresh" content="0.2">', unsafe_allow_html=True)
         else:
             # Move to stimulus phase
             st.session_state.mtf_trial_phase = 'stimulus'
@@ -963,11 +1005,11 @@ def mtf_trial_screen():
             st.session_state.mtf_trial_phase = 'response'
             st.rerun()
         else:
-            # Show countdown or waiting message
+            # Show countdown without blocking sleep
             remaining = 1.0 - elapsed_since_onset
             st.info(f"Please wait {remaining:.1f}s before responding...")
-            time.sleep(0.1)
-            st.rerun()
+            # Use meta refresh for smooth countdown
+            st.markdown(f'<meta http-equiv="refresh" content="0.1">', unsafe_allow_html=True)
     
     elif st.session_state.mtf_trial_phase == 'response':
         # Response phase - show buttons and ADO feedback
@@ -1072,10 +1114,12 @@ def record_mtf_response(trial_data, is_clear):
     st.session_state.mtf_stimulus_onset_time = None
     st.session_state.mtf_awaiting_response = False
     
-    # Continue to next trial
+    # Continue to next trial with smooth transition
     st.markdown("**Continuing to next trial...**")
-    time.sleep(2)
-    st.rerun()
+    st.session_state.mtf_feedback_shown = True
+    st.session_state.mtf_feedback_start = time.time()
+    # Use shorter delay for better user experience
+    st.markdown(f'<meta http-equiv="refresh" content="1.5">', unsafe_allow_html=True)
 
 def mtf_results_screen():
     """Display MTF experiment results"""
