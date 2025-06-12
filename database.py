@@ -146,18 +146,28 @@ class DatabaseManager:
         """Save a trial to the database"""
         session = self.get_session()
         try:
+            # Convert numpy types to standard Python types to avoid database issues
+            def convert_numpy_value(value):
+                if value is None:
+                    return None
+                if hasattr(value, 'item'):  # numpy scalar
+                    return value.item()
+                if hasattr(value, 'dtype'):  # numpy array/scalar
+                    return float(value) if 'float' in str(value.dtype) else int(value)
+                return value
+            
             trial = Trial(
                 experiment_id=experiment_id,
                 trial_number=trial_data.get('trial_number'),
                 is_practice=trial_data.get('is_practice', False),
-                left_stimulus=trial_data.get('left_stimulus'),
-                right_stimulus=trial_data.get('right_stimulus'),
-                stimulus_difference=trial_data.get('stimulus_difference'),
-                mtf_value=trial_data.get('mtf_value'),
-                ado_stimulus_value=trial_data.get('ado_stimulus_value'),
+                left_stimulus=convert_numpy_value(trial_data.get('left_stimulus')),
+                right_stimulus=convert_numpy_value(trial_data.get('right_stimulus')),
+                stimulus_difference=convert_numpy_value(trial_data.get('stimulus_difference')),
+                mtf_value=convert_numpy_value(trial_data.get('mtf_value')),
+                ado_stimulus_value=convert_numpy_value(trial_data.get('ado_stimulus_value')),
                 response=trial_data.get('response'),
                 is_correct=trial_data.get('is_correct'),
-                reaction_time=trial_data.get('reaction_time'),
+                reaction_time=convert_numpy_value(trial_data.get('reaction_time')),
                 timestamp=datetime.fromisoformat(trial_data.get('timestamp', datetime.now().isoformat()))
             )
             session.add(trial)

@@ -1127,12 +1127,12 @@ def record_mtf_response_smooth(trial_data, is_clear):
     # Get estimates before update
     old_estimates = exp_manager.get_current_estimates() if trial_data['trial_number'] > 1 else None
     
-    # Create trial result for data saving
+    # Create trial result for data saving - ensure proper data types
     mtf_trial_result = {
-        'trial_number': trial_data['trial_number'],
-        'mtf_value': trial_data['mtf_value'],
+        'trial_number': int(trial_data['trial_number']),
+        'mtf_value': float(trial_data['mtf_value']),
         'response': 'clear' if is_clear else 'not_clear',
-        'reaction_time': raw_rt,
+        'reaction_time': float(raw_rt),  # Ensure it's a standard Python float
         'timestamp': datetime.now().isoformat(),
         'participant_id': st.session_state.get('participant_id', 'unknown'),
         'experiment_type': 'MTF_Clarity'
