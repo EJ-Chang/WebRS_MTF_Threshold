@@ -979,6 +979,14 @@ def mtf_trial_screen():
         st.session_state.mtf_response_recorded = False
         st.session_state.mtf_feedback_start_time = None
     
+    # Ensure all required session state variables exist
+    if 'mtf_phase_start_time' not in st.session_state:
+        st.session_state.mtf_phase_start_time = time.time()
+    if 'mtf_current_trial' not in st.session_state:
+        st.session_state.mtf_current_trial = None
+    if 'mtf_response_recorded' not in st.session_state:
+        st.session_state.mtf_response_recorded = False
+    
     current_time = time.time()
     phase_elapsed = current_time - st.session_state.mtf_phase_start_time
     
@@ -1026,6 +1034,13 @@ def mtf_trial_screen():
     elif st.session_state.mtf_trial_phase == 'stimulus':
         current_trial = st.session_state.mtf_current_trial
         
+        if current_trial is None:
+            st.error("Trial data missing, restarting...")
+            st.session_state.mtf_trial_phase = 'new_trial'
+            st.session_state.mtf_phase_start_time = time.time()
+            st.rerun()
+            return
+        
         # Header
         st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
         total_trials = exp_manager.max_trials
@@ -1034,7 +1049,7 @@ def mtf_trial_screen():
         st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
         
         # Display stimulus
-        if current_trial['stimulus_image']:
+        if current_trial.get('stimulus_image'):
             display_fullscreen_image(
                 current_trial['stimulus_image'], 
                 caption=f"Is this image clear? MTF: {current_trial['mtf_value']:.1f}%",
@@ -1091,6 +1106,13 @@ def mtf_trial_screen():
     elif st.session_state.mtf_trial_phase == 'feedback':
         current_trial = st.session_state.mtf_current_trial
         
+        if current_trial is None:
+            st.error("Trial data missing in feedback phase, restarting...")
+            st.session_state.mtf_trial_phase = 'new_trial'
+            st.session_state.mtf_phase_start_time = time.time()
+            st.rerun()
+            return
+        
         # Header
         st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
         
@@ -1144,7 +1166,10 @@ def mtf_trial_screen():
             st.rerun()
     
     # Display ADO monitoring in sidebar
-    display_ado_monitor(exp_manager, st.session_state.mtf_current_trial['trial_number'] if st.session_state.mtf_current_trial else 1)
+    trial_num = 1
+    if st.session_state.mtf_current_trial and 'trial_number' in st.session_state.mtf_current_trial:
+        trial_num = st.session_state.mtf_current_trial['trial_number']
+    display_ado_monitor(exp_manager, trial_num)
 
 def record_mtf_response_and_advance(trial_data, is_clear):
     """Record MTF response and advance to feedback phase"""
