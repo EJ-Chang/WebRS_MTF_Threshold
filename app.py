@@ -1116,14 +1116,12 @@ def mtf_trial_screen():
                 if st.button("✗ Not Clear", key=f"not_clear_{current_trial['trial_number']}", use_container_width=True):
                     record_mtf_response_and_advance(current_trial, False)
         else:
-            # Response already recorded
+            # Response already recorded - this should not be reached due to immediate transition
             st.markdown("---")
             st.success("Response recorded! Proceeding to feedback...")
-            # Auto-advance to feedback if not already there
-            if st.session_state.mtf_trial_phase != 'feedback':
-                st.session_state.mtf_trial_phase = 'feedback'
-                st.session_state.mtf_phase_start_time = time.time()
-                st.rerun()
+            st.session_state.mtf_trial_phase = 'feedback'
+            st.session_state.mtf_phase_start_time = time.time()
+            st.rerun()
     
     # Phase 3: Show ADO feedback (1 second)
     elif st.session_state.mtf_trial_phase == 'feedback':
@@ -1227,6 +1225,9 @@ def record_mtf_response_and_advance(trial_data, is_clear):
     # Advance to feedback phase
     st.session_state.mtf_trial_phase = 'feedback'
     st.session_state.mtf_phase_start_time = time.time()
+    
+    # Immediately rerun to show feedback
+    st.rerun()
 
 def record_mtf_response_smooth(trial_data, is_clear):
     """Record MTF response with smooth auto-advance flow"""
