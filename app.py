@@ -560,7 +560,13 @@ def instructions_screen():
                 st.rerun()
         else:
             if st.button("Start MTF Experiment →", type="primary"):
+                # Initialize MTF trial state properly
                 st.session_state.experiment_stage = 'mtf_trial'
+                # Reset MTF session state
+                st.session_state.mtf_trial_phase = 'new_trial'
+                st.session_state.mtf_phase_start_time = time.time()
+                st.session_state.mtf_current_trial = None
+                st.session_state.mtf_response_recorded = False
                 st.rerun()
 
 def practice_screen():
@@ -957,13 +963,36 @@ def show_animated_fixation(elapsed: float):
 
 def mtf_trial_screen():
     """Handle MTF clarity testing trials with proper timing sequence"""
+    # Debug session state
+    debug_info = []
+    for key in st.session_state:
+        if 'mtf' in key.lower() or 'experiment' in key.lower():
+            debug_info.append(f"{key}: {type(st.session_state[key])}")
+    
     if 'mtf_experiment_manager' not in st.session_state:
-        st.error("MTF experiment not properly initialized")
-        st.session_state.experiment_stage = 'welcome'
-        st.rerun()
+        st.error("MTF experiment manager not found in session state")
+        st.write("Available session state keys with 'mtf' or 'experiment':")
+        for info in debug_info:
+            st.write(f"- {info}")
+        
+        st.error("The experiment was not properly initialized. Please go back to setup.")
+        if st.button("Return to Welcome Screen"):
+            st.session_state.experiment_stage = 'welcome'
+            st.rerun()
         return
     
     exp_manager = st.session_state.mtf_experiment_manager
+    
+    if exp_manager is None:
+        st.error("MTF experiment manager is None")
+        st.write("Session state debug info:")
+        for info in debug_info:
+            st.write(f"- {info}")
+        
+        if st.button("Return to Welcome Screen"):
+            st.session_state.experiment_stage = 'welcome'
+            st.rerun()
+        return
     
     # Check if experiment is complete
     if exp_manager.is_experiment_complete():
