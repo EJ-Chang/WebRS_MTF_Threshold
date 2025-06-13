@@ -1052,12 +1052,29 @@ def mtf_trial_screen():
         </div>
         """, unsafe_allow_html=True)
         
-        # Transition to stimulus after 1 second
+        # Debug information
+        st.write(f"Debug: phase_elapsed = {phase_elapsed:.3f}, condition = {phase_elapsed >= 1.0}")
+        
+        # Auto-advance or show continue button
         if phase_elapsed >= 1.0:
+            # Automatically advance to stimulus phase
             st.session_state.mtf_trial_phase = 'stimulus'
             st.session_state.mtf_phase_start_time = time.time()
             st.session_state.mtf_stimulus_onset_time = time.time()
             st.rerun()
+        else:
+            # Show manual continue option for immediate progression
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Skip to Stimulus", key="skip_fixation"):
+                    st.session_state.mtf_trial_phase = 'stimulus'
+                    st.session_state.mtf_phase_start_time = time.time()
+                    st.session_state.mtf_stimulus_onset_time = time.time()
+                    st.rerun()
+            with col2:
+                if st.button("Refresh Timer", key="refresh_fixation"):
+                    st.rerun()
     
     # Phase 2: Show stimulus and accept responses (after 1 sec viewing)
     elif st.session_state.mtf_trial_phase == 'stimulus':
