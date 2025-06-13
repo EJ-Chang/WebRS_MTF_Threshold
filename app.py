@@ -1019,7 +1019,7 @@ def mtf_trial_screen():
     current_time = time.time()
     phase_elapsed = current_time - st.session_state.mtf_phase_start_time
     
-    # Phase 1: Get new trial and show fixation cross (1 second)
+    # Phase 1: Get new trial and show fixation cross (simplified)
     if st.session_state.mtf_trial_phase == 'new_trial':
         if st.session_state.mtf_current_trial is None:
             current_trial = exp_manager.get_next_trial()
@@ -1039,7 +1039,7 @@ def mtf_trial_screen():
         st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
         
         # Show fixation cross
-        st.markdown(f"""
+        st.markdown("""
         <div style="
             text-align: center; 
             padding: 200px 0;
@@ -1048,33 +1048,17 @@ def mtf_trial_screen():
             color: #333;
         ">+</div>
         <div style="text-align: center; color: #666; font-size: 16px;">
-            Fixation cross ({phase_elapsed:.1f}s / 1.0s)
+            Please focus on the cross, then click Continue
         </div>
         """, unsafe_allow_html=True)
         
-        # Debug information
-        st.write(f"Debug: phase_elapsed = {phase_elapsed:.3f}, condition = {phase_elapsed >= 1.0}")
-        
-        # Auto-advance or show continue button
-        if phase_elapsed >= 1.0:
-            # Automatically advance to stimulus phase
+        # Simple continue button (no automatic timing)
+        st.markdown("---")
+        if st.button("Continue to Stimulus →", type="primary", key="continue_stimulus"):
             st.session_state.mtf_trial_phase = 'stimulus'
             st.session_state.mtf_phase_start_time = time.time()
             st.session_state.mtf_stimulus_onset_time = time.time()
             st.rerun()
-        else:
-            # Show manual continue option for immediate progression
-            st.markdown("---")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Skip to Stimulus", key="skip_fixation"):
-                    st.session_state.mtf_trial_phase = 'stimulus'
-                    st.session_state.mtf_phase_start_time = time.time()
-                    st.session_state.mtf_stimulus_onset_time = time.time()
-                    st.rerun()
-            with col2:
-                if st.button("Refresh Timer", key="refresh_fixation"):
-                    st.rerun()
     
     # Phase 2: Show stimulus and accept responses (after 1 sec viewing)
     elif st.session_state.mtf_trial_phase == 'stimulus':
@@ -1117,8 +1101,8 @@ def mtf_trial_screen():
                 blurred = pattern
             st.image(blurred, caption=f"Test Pattern (MTF: {mtf_value:.1f}%)", use_column_width=True)
         
-        # Response buttons (enabled after 1 second of viewing)
-        if phase_elapsed >= 1.0 and not st.session_state.mtf_response_recorded:
+        # Response buttons (always enabled, no waiting period)
+        if not st.session_state.mtf_response_recorded:
             st.markdown("---")
             st.markdown("### Is this image clear?")
             
@@ -1131,22 +1115,15 @@ def mtf_trial_screen():
             with col2:
                 if st.button("✗ Not Clear", key=f"not_clear_{current_trial['trial_number']}", use_container_width=True):
                     record_mtf_response_and_advance(current_trial, False)
-        
-        elif phase_elapsed < 1.0:
-            # Show disabled buttons with countdown
-            countdown = 1.0 - phase_elapsed
+        else:
+            # Response already recorded
             st.markdown("---")
-            st.markdown("### Please observe the image...")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.button("✓ Clear", disabled=True, use_container_width=True)
-            with col2:
-                st.button("✗ Not Clear", disabled=True, use_container_width=True)
-            st.markdown(f"*Buttons enabled in {countdown:.1f}s*")
-            
-            # Auto-refresh for countdown
-            time.sleep(0.1)
-            st.rerun()
+            st.success("Response recorded! Proceeding to feedback...")
+            # Auto-advance to feedback if not already there
+            if st.session_state.mtf_trial_phase != 'feedback':
+                st.session_state.mtf_trial_phase = 'feedback'
+                st.session_state.mtf_phase_start_time = time.time()
+                st.rerun()
     
     # Phase 3: Show ADO feedback (1 second)
     elif st.session_state.mtf_trial_phase == 'feedback':
@@ -1194,8 +1171,9 @@ def mtf_trial_screen():
                 else:
                     st.metric("Status", "Complete!")
         
-        # Auto-advance to next trial after 1 second
-        if phase_elapsed >= 1.0:
+        # Simple continue button instead of auto-advance
+        st.markdown("---")
+        if st.button("Continue to Next Trial →", type="primary", key="next_trial"):
             # Reset for next trial
             st.session_state.mtf_trial_phase = 'new_trial'
             st.session_state.mtf_phase_start_time = time.time()
@@ -1203,12 +1181,6 @@ def mtf_trial_screen():
             st.session_state.mtf_response_recorded = False
             if 'last_mtf_response' in st.session_state:
                 del st.session_state.last_mtf_response
-            st.rerun()
-        else:
-            # Show countdown
-            remaining = 1.0 - phase_elapsed
-            st.markdown(f"*Next trial in {remaining:.1f}s*")
-            time.sleep(0.1)
             st.rerun()
     
     # Display ADO monitoring in sidebar
@@ -1219,9 +1191,16 @@ def mtf_trial_screen():
 
 def record_mtf_response_and_advance(trial_data, is_clear):
     """Record MTF response and advance to feedback phase"""
+    # Prevent double recording
+    if st.session_state.get('mtf_response_recorded', False):
+        return
+    
     if 'mtf_stimulus_onset_time' not in st.session_state:
         st.error("Trial timing error")
         return
+    
+    # Mark as recorded immediately to prevent double clicks
+    st.session_state.mtf_response_recorded = True
     
     # Calculate reaction time
     reaction_time = time.time() - st.session_state.mtf_stimulus_onset_time
@@ -1244,7 +1223,6 @@ def record_mtf_response_and_advance(trial_data, is_clear):
     
     # Store response for feedback
     st.session_state.last_mtf_response = 'Clear' if is_clear else 'Not Clear'
-    st.session_state.mtf_response_recorded = True
     
     # Advance to feedback phase
     st.session_state.mtf_trial_phase = 'feedback'
