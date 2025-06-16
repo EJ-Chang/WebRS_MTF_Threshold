@@ -325,6 +325,12 @@ def welcome_screen():
     st.title("🧠 Psychophysics 2AFC Experiment")
     st.markdown("---")
     
+    # Add performance testing option
+    st.sidebar.markdown("### 🔧 Developer Tools")
+    if st.sidebar.button("📊 ADO Performance Test"):
+        st.session_state.experiment_stage = 'ado_benchmark'
+        st.rerun()
+    
     st.header("Welcome to the Experiment")
     st.write("""
     This is a Two-Alternative Forced Choice (2AFC) psychophysics experiment. 
@@ -1446,6 +1452,188 @@ def plot_mtf_psychometric_function(trial_data):
     with st.expander("Detailed Results by MTF Value"):
         st.dataframe(grouped, use_container_width=True)
 
+def ado_benchmark_screen():
+    """ADO Performance Benchmark Testing Screen"""
+    st.title("📊 ADO Performance Benchmark")
+    st.markdown("---")
+    
+    st.info("This page tests ADO computation time in the current Replit environment to optimize fixation duration.")
+    
+    # Back button
+    if st.button("← Back to Main"):
+        st.session_state.experiment_stage = 'welcome'
+        st.rerun()
+    
+    st.header("Test Configuration")
+    
+    # Configuration options
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Design Space")
+        design_step = st.select_slider(
+            "MTF step size", 
+            options=[1, 2, 5, 10], 
+            value=5,
+            help="Smaller steps = more candidate MTF values = longer computation"
+        )
+        design_range = st.slider("MTF range", 10, 90, (10, 90), step=5)
+        
+    with col2:
+        st.subheader("Parameter Grid")
+        threshold_points = st.slider("Threshold points", 10, 50, 31)
+        slope_points = st.slider("Slope points", 10, 30, 21)
+    
+    # Calculate computational load
+    design_space_size = len(range(design_range[0], design_range[1], design_step))
+    param_combinations = threshold_points * slope_points
+    total_operations = design_space_size * param_combinations * 2  # 2 for both responses
+    
+    st.info(f"""
+    **Computational Load:**
+    - Design space: {design_space_size} MTF values
+    - Parameter grid: {param_combinations:,} combinations  
+    - Total operations per trial: {total_operations:,}
+    """)
+    
+    # Run benchmark
+    if st.button("🚀 Run Benchmark", type="primary"):
+        try:
+            # Import ADO engine
+            from mtf_experiment import MTFExperimentManager
+            from experiments.ado_utils import ADOEngine
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            results_container = st.empty()
+            
+            # Test configuration
+            design_space = np.arange(design_range[0], design_range[1], design_step)
+            
+            status_text.text("初始化 ADO 引擎...")
+            progress_bar.progress(10)
+            
+            # Initialize ADO engine with test configuration
+            start_init = time.time()
+            ado_engine = ADOEngine(
+                design_space=design_space,
+                threshold_range=(5, 95),
+                slope_range=(0.05, 5.0),
+                threshold_points=threshold_points,
+                slope_points=slope_points
+            )
+            init_time = (time.time() - start_init) * 1000
+            
+            progress_bar.progress(20)
+            status_text.text("執行基準測試...")
+            
+            # Run multiple trials
+            trial_times = []
+            num_trials = 5
+            
+            for i in range(num_trials):
+                status_text.text(f"執行 Trial {i+1}/{num_trials}...")
+                progress_bar.progress(20 + (i * 60 // num_trials))
+                
+                # Time the critical operation
+                start_time = time.time()
+                optimal_mtf = ado_engine.get_optimal_design()
+                end_time = time.time()
+                
+                trial_time = (end_time - start_time) * 1000  # Convert to ms
+                trial_times.append(trial_time)
+                
+                # Simulate response for next iteration
+                response = np.random.choice([0, 1])
+                ado_engine.update_posterior(optimal_mtf, response)
+            
+            progress_bar.progress(100)
+            status_text.text("✅ 基準測試完成!")
+            
+            # Calculate statistics
+            mean_time = np.mean(trial_times)
+            max_time = np.max(trial_times)
+            min_time = np.min(trial_times)
+            std_time = np.std(trial_times)
+            
+            # Display results
+            with results_container.container():
+                st.success("🎯 基準測試結果")
+                
+                # Metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("平均時間", f"{mean_time:.0f} ms")
+                with col2:
+                    st.metric("最大時間", f"{max_time:.0f} ms")
+                with col3:
+                    st.metric("最小時間", f"{min_time:.0f} ms")
+                with col4:
+                    st.metric("初始化", f"{init_time:.0f} ms")
+                
+                # Fixation time analysis
+                st.subheader("Fixation時間分析")
+                
+                fixation_times = [500, 750, 1000, 1250, 1500]  # Different fixation durations
+                
+                for fix_time in fixation_times:
+                    if max_time <= fix_time:
+                        st.success(f"✅ {fix_time}ms fixation 可完全遮蓋運算延遲 (最大: {max_time:.0f}ms)")
+                        break
+                else:
+                    needed_time = int(np.ceil(max_time / 100) * 100)  # Round up to nearest 100ms
+                    st.warning(f"⚠️ 建議使用 {needed_time}ms fixation時間")
+                
+                # Detailed breakdown
+                with st.expander("詳細測試數據"):
+                    results_df = pd.DataFrame({
+                        'Trial': range(1, len(trial_times) + 1),
+                        'Time (ms)': [f"{t:.1f}" for t in trial_times]
+                    })
+                    st.dataframe(results_df, use_container_width=True)
+                    
+                    st.write("**配置詳情:**")
+                    st.write(f"- 設計空間大小: {design_space_size} 個MTF值")
+                    st.write(f"- 參數網格: {threshold_points} × {slope_points} = {param_combinations:,} 組合")
+                    st.write(f"- 每次trial總運算: {total_operations:,} 次")
+                    st.write(f"- 平均每次運算: {mean_time/total_operations*1000:.3f} μs")
+                
+                # Recommendations
+                st.subheader("🎯 建議")
+                
+                if max_time <= 1000:
+                    st.success("""
+                    **結果很好！** 當前配置可以用1秒fixation完全遮蓋運算時間。
+                    
+                    **建議實作策略:**
+                    - 在fixation開始時啟動ADO運算
+                    - 保持1秒固定fixation時間
+                    - 用戶感受不到任何延遲
+                    """)
+                elif max_time <= 1500:
+                    st.warning(f"""
+                    **需要調整！** 建議使用 {int(np.ceil(max_time/100)*100)}ms fixation時間。
+                    
+                    **建議實作策略:**
+                    - 動態調整fixation時間 (最少1秒，必要時延長)
+                    - 或簡化ADO配置以加速運算
+                    """)
+                else:
+                    st.error("""
+                    **需要優化！** 運算時間過長，建議:
+                    
+                    1. 減少設計空間大小 (增大step size)
+                    2. 減少參數網格點數
+                    3. 考慮pipeline預運算策略
+                    """)
+                    
+        except ImportError as e:
+            st.error(f"❌ 無法導入ADO模組: {e}")
+            st.info("請確認 experiments/ado_utils.py 存在且可正常運作")
+        except Exception as e:
+            st.error(f"❌ 測試失敗: {e}")
+            st.info("請檢查ADO引擎配置")
+
 # Main app logic
 def show_data_storage_info():
     """Display information about database storage"""
@@ -1530,6 +1718,8 @@ def main():
     # Handle different experiment stages
     if st.session_state.experiment_stage == 'welcome':
         welcome_screen()
+    elif st.session_state.experiment_stage == 'ado_benchmark':
+        ado_benchmark_screen()
     elif st.session_state.experiment_stage == 'instructions':
         instructions_screen()
     elif st.session_state.experiment_stage == 'practice':

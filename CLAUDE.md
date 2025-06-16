@@ -207,5 +207,53 @@ The system automatically detects and configures the appropriate database:
 - **Smart caching** - Preloaded MTF images based on ADO predictions
 - **Bayesian ADO** - Mutual information optimization, 50-60% faster convergence
 - **Auto-detection** - Database, file paths, dependencies automatically configured
+- **ADO Performance Testing** - Integrated benchmark tool for optimizing trial-to-trial delays
+
+### ADO Performance Optimization (Added 2025-06)
+
+#### Performance Testing Tool
+```bash
+# Access via Streamlit web interface
+# Sidebar → "📊 ADO Performance Test"
+# Tests real ADO computation time in Replit environment
+```
+
+#### Key Performance Insights
+- **ADO Computation**: Primary bottleneck in trial transitions
+- **Computation Load**: 19-80 MTF candidates × 651-1,230 parameter combinations × 2 responses
+- **Target**: ≤1000ms to be masked by fixation cross (1 second)
+- **Optimization Strategy**: Use fixation period to hide ADO computation delays
+
+#### Implementation Strategy for Trial Efficiency
+```python
+# Recommended approach: Fixation-masked computation
+Trial Flow:
+1. User responds to Trial N
+2. Start fixation cross (1+ seconds)
+3. SIMULTANEOUSLY: Start ADO computation for Trial N+1
+4. Fixation completes when computation finishes
+5. Display Trial N+1 stimulus (no perceived delay)
+```
+
+### Development Guidelines (Important)
+
+#### CLAUDE.md Maintenance
+- **Auto-update**: Always update CLAUDE.md when modifying architecture or adding features
+- **Sync**: Ensure documentation matches actual codebase
+- **Include**: New commands, performance improvements, file structure changes
+
+#### Replit Deployment Considerations
+- **Performance**: All modifications must consider Replit's resource limitations
+- **Memory**: Monitor usage, avoid memory-intensive operations
+- **Network**: Account for potential latency in web interface
+- **Integration**: New features must fit existing Streamlit architecture
+
+#### Git Branch Strategy
+- **Feature branches**: Use for experimental features or major performance optimizations
+- **Main branch**: Keep stable and always runnable
+- **Branching triggers**: Suggest new branch for:
+  - Major architecture changes
+  - Experimental ADO optimizations
+  - UI/UX redesigns that might break existing functionality
 
 This platform represents a research-grade implementation of adaptive psychophysical testing optimized for Replit hosting with modern web technologies and rigorous experimental methodology.
