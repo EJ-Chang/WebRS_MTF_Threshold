@@ -17,6 +17,24 @@ import base64
 from io import BytesIO
 import os
 
+# 環境檢測：根據不同環境設定不同端口
+def detect_environment():
+    """檢測當前運行環境並設定相應的端口"""
+    # 檢查是否在 Replit 環境
+    if os.path.exists('/home/runner') or 'REPL_ID' in os.environ:
+        # Replit 環境
+        os.environ['STREAMLIT_SERVER_PORT'] = '5000'
+        os.environ['STREAMLIT_SERVER_ADDRESS'] = '0.0.0.0'
+        print("🌐 檢測到 Replit 環境，使用端口 5000")
+    else:
+        # 本地環境
+        os.environ['STREAMLIT_SERVER_PORT'] = '8501'
+        os.environ['STREAMLIT_SERVER_ADDRESS'] = 'localhost'
+        print("💻 檢測到本地環境，使用端口 8501")
+
+# 執行環境檢測
+detect_environment()
+
 # Configure page
 st.set_page_config(
     page_title="Psychophysics 2AFC Experiment",

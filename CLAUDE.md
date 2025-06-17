@@ -15,6 +15,8 @@ python main.py
 
 # Alternative: Direct Streamlit launch
 streamlit run app.py --server.port 5000 --server.address 0.0.0.0
+# If on my local computer:
+# streamlit run app.py --server.port 8501
 
 # Development testing
 python test_replit_environment.py
@@ -25,11 +27,17 @@ python test_replit_environment.py
 # For local development (non-Replit)
 streamlit run app.py
 
-# Install dependencies
+# Install dependencies (modern approach)
+uv sync
+
+# Install dependencies (legacy approach)
 pip install -r requirements.txt
 
 # Test environment setup
 python test_replit_environment.py
+
+# Test MTF improvements
+python test_mtf_improvements.py
 ```
 
 ### Replit-Specific Development
@@ -37,12 +45,18 @@ python test_replit_environment.py
 # Test Replit environment compatibility
 python test_replit_environment.py
 
+# Test MTF experiment improvements (comprehensive test suite)
+python test_mtf_improvements.py
+
 # Check all dependencies and setup
 python -c "from test_replit_environment import main; main()"
 
 # Standalone experiments (if experiments/ utilities are available)
 cd experiments && python Exp_MTF_ADO.py
 cd experiments && python Exp_MTF_Psychometric_YN.py
+
+# Test standalone ADO optimizer
+python -c "from ado_optimizer import ADOOptimizer; ado = ADOOptimizer(); print('ADO optimizer ready')"
 ```
 
 ### Database Operations (Replit-Optimized)
@@ -63,29 +77,34 @@ python -c "from database import DatabaseManager; db = DatabaseManager(); db.expo
 - **`mtf_experiment.py`** - MTF clarity testing experiment manager (with latest improvements)
 - **`database.py`** - Database integration with auto-detection (PostgreSQL/SQLite)
 - **`data_manager.py`** - Data export and psychometric function analysis
+- **`ado_optimizer.py`** - Standalone ADO optimizer with 4-parameter Weibull implementation
 
 ### Replit Configuration Files
-- **`.replit`** - Replit run configuration and port settings
-- **`replit.nix`** - Nix package dependencies for Replit environment
-- **`requirements.txt`** - Python package dependencies
-- **`pyproject.toml`** - Modern Python project configuration
+- **`.replit`** - Replit run configuration with PostgreSQL module and port settings
+- **`uv.lock`** - UV package manager lock file for dependency resolution
+- **`requirements.txt`** - Python package dependencies (legacy format)
+- **`pyproject.toml`** - Modern Python project configuration with dependencies
 
 ### Experiment Modules
 - **`experiments/ado_utils.py`** - Advanced Bayesian ADO engine with mutual information optimization
 - **`experiments/mtf_utils.py`** - Real-time MTF image processing and performance optimization
 - **`experiments/Exp_MTF_ADO.py`** - Standalone PsychoPy MTF experiment
+- **`experiments/Exp_MTF_Psychometric_YN.py`** - Yes/No MTF psychometric function experiment
 - **`simple_ado.py`** - Simplified ADO for 2AFC experiments
+- **`test_mtf_improvements.py`** - Test suite for MTF experiment improvements (Chinese/English bilingual)
 
 ### Key Architectural Patterns
 
 #### Adaptive Design Optimization (ADO)
-The platform implements two ADO approaches:
+The platform implements three ADO approaches:
 - **Simple ADO** (`simple_ado.py`) - For 2AFC experiments with basic threshold tracking
-- **Advanced ADO** (`experiments/ado_utils.py`) - Full Bayesian implementation with:
-  - Mutual information maximization
-  - Real-time parameter estimation
-  - Convergence criteria monitoring
-  - Posterior distribution tracking
+- **Advanced ADO** (`experiments/ado_utils.py`) - Full Bayesian implementation with mutual information optimization
+- **Standalone ADO** (`ado_optimizer.py`) - Self-contained 4-parameter Weibull ADO optimizer with:
+  - Vectorized Bayesian inference for performance
+  - 4D posterior distribution tracking (alpha, beta, gamma, lambda)
+  - Expected information gain calculation
+  - Optimized parameter grids for psychophysics
+  - Built-in credible interval estimation
 
 #### Session State Management
 Streamlit session state is extensively used for:
@@ -172,19 +191,23 @@ The system automatically detects and configures the appropriate database:
 ## File Dependencies
 
 ### Python Dependencies (pyproject.toml)
-- `streamlit` - Web application framework
-- `opencv-python` - Image processing for MTF
-- `numpy`, `scipy` - Scientific computing and ADO algorithms
-- `plotly` - Interactive psychometric function plotting
-- `psycopg2-binary` - PostgreSQL database connectivity
-- `sqlalchemy` - Database ORM
-- `pandas` - Data manipulation and export
+- `streamlit>=1.45.1` - Web application framework
+- `opencv-python>=4.11.0.86` - Image processing for MTF
+- `numpy>=2.2.6`, `scipy>=1.15.3` - Scientific computing and ADO algorithms
+- `plotly>=6.1.2` - Interactive psychometric function plotting
+- `psycopg2-binary>=2.9.10` - PostgreSQL database connectivity
+- `sqlalchemy>=2.0.41` - Database ORM
+- `pandas>=2.2.3` - Data manipulation and export
+- `matplotlib>=3.10.3` - Additional plotting capabilities
+- `pillow>=11.2.1` - Image manipulation support
 
 ### Key File Relationships
 - `app.py` imports and coordinates all experiment managers
 - Experiment managers import ADO utilities and database operations
 - MTF experiments depend on `experiments/mtf_utils.py` for image processing
 - Database operations are centralized in `database.py` with SQLAlchemy models
+- `ado_optimizer.py` provides standalone ADO functionality independent of other modules
+- `test_mtf_improvements.py` validates integration between all components
 
 ## Replit Deployment Notes
 
@@ -208,6 +231,9 @@ The system automatically detects and configures the appropriate database:
 - **Bayesian ADO** - Mutual information optimization, 50-60% faster convergence
 - **Auto-detection** - Database, file paths, dependencies automatically configured
 - **ADO Performance Testing** - Integrated benchmark tool for optimizing trial-to-trial delays
+- **Standalone ADO Optimizer** - Self-contained 4-parameter Weibull implementation
+- **Comprehensive Test Suite** - Bilingual test framework for validation (`test_mtf_improvements.py`)
+- **UV Package Management** - Modern dependency resolution with `uv.lock`
 
 ### ADO Performance Optimization (Added 2025-06)
 
@@ -255,5 +281,48 @@ Trial Flow:
   - Major architecture changes
   - Experimental ADO optimizations
   - UI/UX redesigns that might break existing functionality
+
+## Current Development Status (2025-06)
+
+### Project Maturity
+- **Production Ready**: Core MTF and 2AFC experiments fully functional
+- **Database Integration**: PostgreSQL/SQLite auto-detection with session tracking
+- **Performance Optimized**: Sub-second ADO computation, precise timing system
+- **Multi-language Support**: Chinese/English bilingual test infrastructure
+- **Comprehensive Testing**: Full test suite covering all major components
+
+### Recent Additions
+- **`ado_optimizer.py`**: Standalone 4-parameter Weibull ADO implementation
+- **`test_mtf_improvements.py`**: Comprehensive bilingual test suite
+- **`.replit` Configuration**: Updated with PostgreSQL module support
+- **`uv.lock`**: Modern package management for reliable builds
+- **Enhanced Dependencies**: Updated to latest stable versions (Streamlit 1.45.1, OpenCV 4.11, etc.)
+
+### File Structure Summary
+```
+├── Core Application
+│   ├── main.py              # Replit entry point
+│   ├── app.py               # Streamlit web interface
+│   ├── experiment.py        # 2AFC experiments
+│   ├── mtf_experiment.py    # MTF experiments
+│   └── database.py          # Data persistence
+├── ADO Implementation
+│   ├── simple_ado.py        # Basic ADO for 2AFC
+│   ├── ado_optimizer.py     # Standalone 4-param Weibull ADO
+│   └── experiments/ado_utils.py  # Advanced Bayesian ADO
+├── Testing & Validation
+│   ├── test_replit_environment.py   # Environment validation
+│   ├── test_mtf_improvements.py    # MTF components test
+│   └── test_basic_imports.py       # Import validation
+├── Configuration
+│   ├── .replit             # Replit deployment config
+│   ├── pyproject.toml      # Modern Python project
+│   ├── requirements.txt    # Legacy dependencies
+│   └── uv.lock            # Package lock file
+└── Assets & Results
+    ├── stimuli_preparation/  # Image processing utilities
+    ├── results/             # Generated plots and data
+    └── psychophysics_experiments.db  # SQLite database
+```
 
 This platform represents a research-grade implementation of adaptive psychophysical testing optimized for Replit hosting with modern web technologies and rigorous experimental methodology.
