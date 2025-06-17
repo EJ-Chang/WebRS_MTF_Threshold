@@ -96,7 +96,9 @@ class DatabaseManager:
     
     def _setup_sqlite_fallback(self):
         """Setup SQLite as fallback database"""
-        self.database_url = "sqlite:///./psychophysics_experiments.db"
+        # self.database_url = "sqlite:///./psychophysics_experiments.db"
+        # 在本機環境中，將PostgreSQL設定改為SQLite
+        self.database_url = "sqlite:///psychophysics_experiments.db"
         self.engine = create_engine(self.database_url)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         Base.metadata.create_all(bind=self.engine)
