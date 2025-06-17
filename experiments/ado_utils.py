@@ -189,10 +189,10 @@ class ADOEngine:
         optimal_idx = np.argmax(utilities)
         optimal_mtf = self.design_space[optimal_idx]
         
-        # 調試輸出：顯示所有 MTF 的效用值
-        utility_dict = dict(zip(self.design_space, utilities))
-        print(f"  Utility values: {utility_dict}")
-        print(f"  Selected MTF: {optimal_mtf}, Max utility: {utilities[optimal_idx]:.6f}")
+        # 調試輸出已關閉 - 避免console噪音
+        # utility_dict = dict(zip(self.design_space, utilities))
+        # print(f"  Utility values: {utility_dict}")
+        # print(f"  Selected MTF: {optimal_mtf}, Max utility: {utilities[optimal_idx]:.6f}")
         
         return float(optimal_mtf)
     

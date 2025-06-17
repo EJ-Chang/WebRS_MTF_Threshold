@@ -30,7 +30,7 @@ def detect_environment():
         # 本地環境
         os.environ['STREAMLIT_SERVER_PORT'] = '8501'
         os.environ['STREAMLIT_SERVER_ADDRESS'] = 'localhost'
-        print("💻 檢測到本地環境，使用端口 8501")
+        # print("💻 檢測到本地環境，使用端口 8501")  # 已關閉控制台輸出
 
 # 執行環境檢測
 detect_environment()
@@ -75,9 +75,10 @@ def display_fullscreen_image(image_data, caption="", mtf_value=None):
     """
     Display image in fullscreen mode with proper sizing
     保持原始像素比例，根據視窗智能裁切中心區域
+    Returns: dict with image dimensions for button positioning
     """
     if image_data is None:
-        return
+        return None
     
     # If image_data is base64 string, decode it
     if isinstance(image_data, str) and image_data.startswith('data:image'):
@@ -95,38 +96,19 @@ def display_fullscreen_image(image_data, caption="", mtf_value=None):
     # Ensure we have a valid numpy array
     if not isinstance(image_array, np.ndarray):
         st.error("無法處理圖片格式")
-        return
+        return None
     
-    # 根據視窗大小智能裁切中心區域，保持 1:1 像素比例
+    # 保持原始長寬比，避免因容器限制而變形
     h, w = image_array.shape[:2]
     
-    # 最大化利用畫布空間，優先保持原始尺寸
-    # 只有在圖片過大時才裁切
-    max_display_width = 1400  # 增大最大寬度
-    max_display_height = 1000  # 增大最大高度
+    # 移除強制裁切，讓CSS控制顯示大小來保持比例
+    # 這樣圖片的像素尺寸保持不變，由瀏覽器負責縮放
+    processed_img = image_array
     
-    # 計算需要裁切的尺寸，保持中心位置
-    if w > max_display_width or h > max_display_height:
-        # 需要裁切時，盡可能保持更大的尺寸
-        if w > max_display_width:
-            crop_width = max_display_width
-        else:
-            crop_width = w
-            
-        if h > max_display_height:
-            crop_height = max_display_height
-        else:
-            crop_height = h
-        
-        # 計算中心裁切座標
-        start_x = (w - crop_width) // 2
-        start_y = (h - crop_height) // 2
-        
-        # 裁切中心區域
-        processed_img = image_array[start_y:start_y + crop_height, start_x:start_x + crop_width]
-    else:
-        # 圖片尺寸適合，直接使用
-        processed_img = image_array
+    # 註解掉的舊邏輯（會改變長寬比）:
+    # max_display_width = 1400
+    # max_display_height = 1000
+    # 這種裁切方式會破壞原始比例，改由CSS處理
     
     # Convert to PIL for display
     img_pil = Image.fromarray(processed_img)
@@ -136,15 +118,40 @@ def display_fullscreen_image(image_data, caption="", mtf_value=None):
     img_pil.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
     
-    # Display using HTML with maximum canvas utilization
+    # Display using HTML with NO SCALING - preserve exact pixel dimensions
+    # Add unique ID for JavaScript positioning calculation
+    img_id = f"mtf_img_{int(time.time() * 1000)}"
+    final_h, final_w = processed_img.shape[:2]
+    
     html_content = f"""
-    <div style="text-align: center; margin: 0; padding: 0; width: 100%; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-        <img src="data:image/png;base64,{img_str}" 
-             style="max-width: 100vw; max-height: 90vh; width: auto; height: auto; object-fit: contain; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">
-        <p style="margin: 5px 0 0 0; font-size: 12px; color: #666; position: absolute; bottom: 10px;">{caption}</p>
+    <div id="img_container_{img_id}" style="text-align: center; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; align-items: center; overflow: auto;">
+        <img id="{img_id}" src="data:image/png;base64,{img_str}" 
+             style="width: {final_w}px; height: {final_h}px; object-fit: none; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;"
+             onload="window.mtf_img_height = this.clientHeight; window.mtf_img_center = this.offsetTop + this.clientHeight/2;">
+        <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">{caption}</p>
     </div>
+    <script>
+        // Store image center position for button alignment
+        window.getMTFImageCenter = function() {{
+            var img = document.getElementById('{img_id}');
+            if (img) {{
+                return img.offsetTop + img.clientHeight / 2;
+            }}
+            return {final_h // 2}; // fallback to calculated center
+        }};
+        console.log('MTF Image displayed at exact size: {final_w}x{final_h}px');
+    </script>
     """
     st.markdown(html_content, unsafe_allow_html=True)
+    
+    # Return EXACT image dimensions for button positioning - no scaling calculations
+    return {
+        'display_height': final_h,  # Exact pixel height
+        'center_position': final_h / 2,  # Exact pixel center
+        'original_width': final_w,
+        'original_height': final_h,
+        'no_scaling': True  # Flag to confirm no scaling applied
+    }
 
 def display_ado_monitor(exp_manager, trial_number):
     """
@@ -340,7 +347,7 @@ if 'trial_locked' not in st.session_state:
 
 def welcome_screen():
     """Display welcome screen and collect participant information"""
-    st.title("🧠 Psychophysics 2AFC Experiment")
+    st.title("🧠 MTF Clarity Testing Experiment")
     st.markdown("---")
     
     # Add performance testing option
@@ -349,18 +356,18 @@ def welcome_screen():
         st.session_state.experiment_stage = 'ado_benchmark'
         st.rerun()
     
-    st.header("Welcome to the Experiment")
+    st.header("Welcome to the MTF Clarity Test")
     st.write("""
-    This is a Two-Alternative Forced Choice (2AFC) psychophysics experiment. 
-    You will be presented with pairs of stimuli and asked to make choices between them.
+    This is an MTF (Modulation Transfer Function) clarity testing experiment using Adaptive Design Optimization (ADO). 
+    You will view images with varying levels of clarity and make judgments about their sharpness.
     """)
     
     st.subheader("Instructions:")
     st.write("""
-    1. **Setup**: First, enter your participant ID and configure the experiment
-    2. **Practice**: Complete a few practice trials to familiarize yourself
-    3. **Main Experiment**: Complete all experimental trials
-    4. **Completion**: Your data will be automatically saved
+    1. **Setup**: Enter your participant ID and configure the experiment parameters
+    2. **Practice**: Complete a few practice trials to familiarize yourself with the task
+    3. **Main Experiment**: Respond to image clarity questions - the experiment adapts based on your responses
+    4. **Completion**: Your data will be automatically saved to the database
     """)
     
     st.markdown("---")
@@ -372,95 +379,44 @@ def welcome_screen():
         help="Enter a unique identifier (e.g., your initials + date)"
     )
     
-    # Experiment type selection
-    st.subheader("Experiment Type")
-    experiment_type = st.radio(
-        "Choose experiment type:",
-        ["Brightness Discrimination (2AFC)", "MTF Clarity Testing (Y/N)"],
-        help="Select the type of psychophysical experiment to run"
-    )
-    
-    if experiment_type == "Brightness Discrimination (2AFC)":
-        st.info("Traditional 2AFC brightness discrimination task with two circles")
-    else:
-        st.info("MTF (Modulation Transfer Function) clarity testing with image stimuli")
-    
-    # Experiment configuration
+    # MTF experiment configuration only
     st.subheader("Experiment Configuration")
+    col1, col2 = st.columns(2)
+    with col1:
+        max_trials = st.slider("Maximum trials:", 20, 100, 50)
+        min_trials = st.slider("Minimum trials:", 10, 30, 15)
     
-    if experiment_type == "Brightness Discrimination (2AFC)":
-        col1, col2 = st.columns(2)
-        with col1:
-            num_trials = st.slider("Number of trials:", 10, 100, 30)
-            stimulus_duration = st.slider("Stimulus duration (seconds):", 0.5, 5.0, 2.0, 0.1)
-        
-        with col2:
-            inter_trial_interval = st.slider("Inter-trial interval (seconds):", 0.5, 3.0, 1.0, 0.1)
-            num_practice_trials = st.slider("Practice trials:", 3, 10, 5)
-    else:
-        # MTF experiment parameters
-        col1, col2 = st.columns(2)
-        with col1:
-            max_trials = st.slider("Maximum trials:", 20, 100, 50)
-            min_trials = st.slider("Minimum trials:", 10, 30, 15)
-        
-        with col2:
-            convergence_threshold = st.slider("Convergence threshold:", 0.05, 0.3, 0.15, 0.01)
-            stimulus_duration = st.slider("Stimulus duration (seconds):", 0.5, 5.0, 1.0, 0.1)
-        
-        # MTF display options
-        st.subheader("Display Options")
-        show_trial_feedback = st.checkbox(
-            "Show trial feedback (ADO results after each response)",
-            value=True,
-            help="If unchecked, experiment will proceed directly to next trial after response"
-        )
+    with col2:
+        convergence_threshold = st.slider("Convergence threshold:", 0.05, 0.3, 0.15, 0.01)
+        stimulus_duration = st.slider("Stimulus duration (seconds):", 0.5, 5.0, 1.0, 0.1)
+    
+    # MTF display options
+    st.subheader("Display Options")
+    show_trial_feedback = st.checkbox(
+        "Show trial feedback (ADO results after each response)",
+        value=True,
+        help="If unchecked, experiment will proceed directly to next trial after response"
+    )
     
     # ADO configuration
     st.subheader("Adaptive Design Optimization (ADO)")
-    use_ado = st.checkbox(
-        "Enable ADO for optimal stimulus selection", 
-        value=True,
-        help="ADO adaptively selects stimuli to maximize information gain about the psychometric function"
-    )
-    
-    if use_ado:
-        st.info("ADO will intelligently select stimuli to efficiently estimate your psychometric function parameters")
+    st.info("ADO is enabled by default and will intelligently select MTF values to efficiently estimate your clarity perception threshold")
     
     # Start experiment button
-    if st.button("Start Experiment", type="primary"):
+    if st.button("Start MTF Experiment", type="primary"):
         if participant_id.strip():
             st.session_state.participant_id = participant_id.strip()
-            st.session_state.experiment_type = experiment_type
+            st.session_state.experiment_type = "MTF Clarity Testing"
             
-            if experiment_type == "Brightness Discrimination (2AFC)":
-                # Ensure variables are defined with defaults
-                num_trials_val = locals().get('num_trials', 30)
-                num_practice_trials_val = locals().get('num_practice_trials', 5)
-                inter_trial_interval_val = locals().get('inter_trial_interval', 1.0)
-                
-                st.session_state.experiment_manager = ExperimentManager(
-                    num_trials=num_trials_val,
-                    num_practice_trials=num_practice_trials_val,
-                    stimulus_duration=stimulus_duration,
-                    inter_trial_interval=inter_trial_interval_val,
-                    participant_id=st.session_state.participant_id,
-                    use_ado=use_ado
-                )
-            else:
-                # Ensure variables are defined with defaults
-                max_trials_val = locals().get('max_trials', 50)
-                min_trials_val = locals().get('min_trials', 15)
-                convergence_threshold_val = locals().get('convergence_threshold', 0.15)
-                
-                st.session_state.mtf_experiment_manager = MTFExperimentManager(
-                    max_trials=max_trials_val,
-                    min_trials=min_trials_val,
-                    convergence_threshold=convergence_threshold_val,
-                    participant_id=st.session_state.participant_id
-                )
-                st.session_state.stimulus_duration = stimulus_duration
-                st.session_state.show_trial_feedback = show_trial_feedback
+            # Initialize MTF experiment manager
+            st.session_state.mtf_experiment_manager = MTFExperimentManager(
+                max_trials=max_trials,
+                min_trials=min_trials,
+                convergence_threshold=convergence_threshold,
+                participant_id=st.session_state.participant_id
+            )
+            st.session_state.stimulus_duration = stimulus_duration
+            st.session_state.show_trial_feedback = show_trial_feedback
             
             st.session_state.experiment_stage = 'instructions'
             st.rerun()
@@ -536,32 +492,40 @@ def welcome_screen():
                 st.dataframe(sample_df)
 
 def instructions_screen():
-    """Display detailed instructions before practice"""
-    st.title("📋 Experiment Instructions")
+    """Display MTF experiment instructions"""
+    st.title("📋 MTF Clarity Testing Instructions")
     st.markdown("---")
     
     st.header("Task Description")
     st.write("""
-    In this experiment, you will see two circles presented side by side. Your task is to:
+    In this experiment, you will view images with different levels of clarity and judge their sharpness:
     
-    1. **Look at both circles carefully**
-    2. **Choose which circle appears brighter** (has more light/luminance)
-    3. **Respond as quickly and accurately as possible**
+    1. **Look at each image carefully**
+    2. **Judge whether the image appears clear or blurry**
+    3. **Respond based on your immediate perception**
     """)
     
     st.header("How to Respond")
     st.write("""
-    - Click the **Left** button to choose the left circle (if it's brighter)
-    - Click the **Right** button to choose the right circle (if it's brighter)
-    - Or use keyboard shortcuts: **'A'** for left, **'L'** for right
+    - Click **"✓ Clear"** if the image appears sharp and clear
+    - Click **"✗ Not Clear"** if the image appears blurry or unclear
+    - Trust your first impression - don't overthink
+    """)
+    
+    st.header("About Adaptive Design Optimization (ADO)")
+    st.info("""
+    - The system learns from your responses to find your clarity perception threshold
+    - Early trials may seem very easy or very hard as the system calibrates
+    - The experiment will automatically converge on your personal threshold
+    - Each response helps the algorithm select the next optimal test level
     """)
     
     st.header("Important Notes")
-    st.info("""
-    - There are no "correct" or "incorrect" answers - respond based on your perception
-    - Try to respond as quickly as possible while still being thoughtful
-    - Take breaks between trials if needed
-    - The experiment will automatically save your responses
+    st.warning("""
+    - Focus on the overall clarity of the entire image
+    - Maintain consistent viewing distance from your screen
+    - Ensure good lighting conditions
+    - Take breaks if you feel tired - quality responses are important
     """)
     
     st.markdown("---")
@@ -573,152 +537,17 @@ def instructions_screen():
             st.rerun()
     
     with col2:
-        experiment_type = st.session_state.get('experiment_type', 'Brightness Discrimination (2AFC)')
-        
-        if experiment_type == "Brightness Discrimination (2AFC)":
-            if st.button("Start Practice Trials →", type="primary"):
-                st.session_state.experiment_stage = 'practice'
-                if hasattr(st.session_state, 'experiment_manager') and st.session_state.experiment_manager:
-                    st.session_state.experiment_manager.start_practice()
-                # Reset trial state for new session
-                st.session_state.trial_locked = False
-                st.session_state.current_trial_data = None
-                st.session_state.awaiting_response = False
-                st.rerun()
-        else:
-            if st.button("Start MTF Experiment →", type="primary"):
-                # Initialize MTF trial state properly
-                st.session_state.experiment_stage = 'mtf_trial'
-                # Reset MTF session state
-                st.session_state.mtf_trial_phase = 'new_trial'
-                st.session_state.mtf_phase_start_time = time.time()
-                st.session_state.mtf_current_trial = None
-                st.session_state.mtf_response_recorded = False
-                st.rerun()
-
-def practice_screen():
-    """Handle practice trials"""
-    exp_manager = st.session_state.experiment_manager
-    
-    st.title("🎯 Practice Trials")
-    st.markdown("---")
-    
-    if exp_manager.practice_completed:
-        st.success("✅ Practice completed!")
-        st.write("Great job! You're ready for the main experiment.")
-        
-        if st.button("Start Main Experiment →", type="primary"):
-            st.session_state.experiment_stage = 'experiment'
-            exp_manager.start_main_experiment()
-            # Reset trial state for new session
-            st.session_state.trial_locked = False
-            st.session_state.current_trial_data = None
-            st.session_state.awaiting_response = False
+        if st.button("Start MTF Experiment →", type="primary"):
+            # Initialize MTF trial state properly
+            st.session_state.experiment_stage = 'mtf_trial'
+            # Reset MTF session state
+            st.session_state.mtf_trial_phase = 'new_trial'
+            st.session_state.mtf_phase_start_time = time.time()
+            st.session_state.mtf_current_trial = None
+            st.session_state.mtf_response_recorded = False
             st.rerun()
-        return
-    
-    # Display practice progress
-    progress = exp_manager.current_practice_trial / exp_manager.num_practice_trials
-    st.progress(progress)
-    st.write(f"Practice Trial {exp_manager.current_practice_trial + 1} of {exp_manager.num_practice_trials}")
-    
-    # Run trial
-    run_trial(is_practice=True)
 
-def experiment_screen():
-    """Handle main experiment trials"""
-    exp_manager = st.session_state.experiment_manager
-    
-    st.title("🧪 Main Experiment")
-    st.markdown("---")
-    
-    if exp_manager.experiment_completed:
-        st.success("🎉 Experiment completed!")
-        st.balloons()
-        
-        # Display summary
-        total_trials = len(exp_manager.trial_data)
-        if total_trials > 0:
-            avg_rt = np.mean([trial['reaction_time'] for trial in exp_manager.trial_data])
-            accuracy = np.mean([trial.get('is_correct', False) for trial in exp_manager.trial_data])
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Trials", total_trials)
-            with col2:
-                st.metric("Average RT", f"{avg_rt:.2f}s")
-            with col3:
-                st.metric("Accuracy", f"{accuracy:.1%}")
-        
-        # Generate and display psychometric function
-        st.subheader("Your Psychometric Function")
-        plot_psychometric_function(exp_manager.trial_data)
-        
-        # Show ADO results if ADO was used
-        if exp_manager.use_ado:
-            st.subheader("ADO Results")
-            ado_summary = exp_manager.get_ado_summary()
-            
-            if ado_summary:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("**Threshold Estimation:**")
-                    st.write(f"- Estimated Threshold: {ado_summary.get('threshold_estimate', 0):.3f}")
-                    st.write(f"- Final Accuracy: {ado_summary.get('recent_accuracy', 0):.1%}")
-                with col2:
-                    st.write("**Algorithm Performance:**")
-                    st.write(f"- Trials Completed: {ado_summary.get('n_trials', 0)}")
-                    st.write(f"- Converged: {'Yes' if ado_summary.get('converged', False) else 'No'}")
-                    st.write(f"- Final Difference: {ado_summary.get('current_difference', 0):.3f}")
-        
-        # Save data
-        if st.button("Download Results", type="primary"):
-            csv_data = st.session_state.data_manager.export_to_csv(exp_manager.trial_data, exp_manager.participant_id)
-            st.download_button(
-                label="📊 Download CSV File",
-                data=csv_data,
-                file_name=f"experiment_results_{exp_manager.participant_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-        
-        if st.button("Start New Experiment"):
-            # Reset session state
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
-        return
-    
-    # Display experiment progress
-    progress = exp_manager.current_trial / exp_manager.num_trials
-    st.progress(progress)
-    
-    # Show trial info and ADO status
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        st.write(f"Trial {exp_manager.current_trial + 1} of {exp_manager.num_trials}")
-    with col2:
-        if exp_manager.use_ado:
-            entropy = exp_manager.get_ado_entropy()
-            st.write(f"ADO Uncertainty: {entropy:.2f}")
-    
-    # Show real-time ADO parameter estimates during experiment
-    if exp_manager.use_ado and exp_manager.current_trial > 0:
-        with st.expander("ADO Algorithm Status", expanded=False):
-            ado_summary = exp_manager.get_ado_summary()
-            if ado_summary:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("**Current Estimates:**")
-                    st.write(f"Threshold: {ado_summary.get('threshold_estimate', 0):.3f}")
-                    st.write(f"Current Difference: {ado_summary.get('current_difference', 0):.3f}")
-                with col2:
-                    st.write("**Performance:**")
-                    st.write(f"Trials: {ado_summary.get('n_trials', 0)}")
-                    st.write(f"Recent Accuracy: {ado_summary.get('recent_accuracy', 0):.1%}")
-                    st.write(f"Converged: {'Yes' if ado_summary.get('converged', False) else 'No'}")
-    
-    # Run trial
-    run_trial(is_practice=False)
+# 2AFC functions removed - this app now focuses exclusively on MTF clarity testing
 
 def run_trial(is_practice=False):
     """Run a single trial"""
@@ -1058,38 +887,58 @@ def mtf_trial_screen():
         
         current_trial = st.session_state.mtf_current_trial
         
-        # Header
-        st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
-        total_trials = exp_manager.max_trials
-        progress = current_trial['trial_number'] / total_trials
-        st.progress(progress)
-        st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
-        
-        # Show fixation cross with countdown
-        if phase_elapsed >= 1.0:
+        # Show fixation cross with countdown - changed to 3 seconds
+        if phase_elapsed >= 3.0:
             # Countdown finished, auto-advance to stimulus
             st.session_state.mtf_trial_phase = 'stimulus'
             st.session_state.mtf_phase_start_time = time.time()
             st.session_state.mtf_stimulus_onset_time = time.time()
             st.rerun()
         else:
-            # Show fixation cross
-            st.markdown("""
+            # Calculate remaining time for countdown
+            remaining_time = 3.0 - phase_elapsed
+            countdown_display = f"{remaining_time:.1f}"
+            
+            # Show fixation cross with countdown - centered in viewport
+            st.markdown(f"""
             <div style="
-                text-align: center; 
-                padding: 200px 0;
-                font-size: 120px; 
-                font-weight: bold; 
-                color: #333;
-            ">+</div>
-            <div style="text-align: center; color: #666; font-size: 18px;">
-                請注視中心十字
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                height: 60vh;
+                text-align: center;
+            ">
+                <div style="
+                    font-size: 120px; 
+                    font-weight: bold; 
+                    color: #333;
+                    margin-bottom: 30px;
+                ">+</div>
+                <div style="
+                    color: #666; 
+                    font-size: 18px; 
+                    margin-bottom: 20px;
+                ">請注視中心十字</div>
+                <div style="
+                    color: #999; 
+                    font-size: 24px; 
+                    font-weight: bold;
+                ">{countdown_display}s</div>
             </div>
             """, unsafe_allow_html=True)
             
-            # Auto-refresh every 100ms
+            # Auto-refresh every 100ms for smooth countdown
             time.sleep(0.1)
             st.rerun()
+        
+        # Header at the bottom
+        st.markdown("---")
+        st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
+        total_trials = exp_manager.max_trials
+        progress = current_trial['trial_number'] / total_trials
+        st.progress(progress)
+        st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
     
     # Phase 2: Show stimulus and accept responses (after 1 sec viewing)
     elif st.session_state.mtf_trial_phase == 'stimulus':
@@ -1102,27 +951,20 @@ def mtf_trial_screen():
             st.rerun()
             return
         
-        # Header
-        st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
-        total_trials = exp_manager.max_trials
-        progress = current_trial['trial_number'] / total_trials
-        st.progress(progress)
-        st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
-        
-        # Layout: Image on left, buttons on right
+        # Layout: Image on left, buttons on right (buttons vertically centered in viewport)
         main_col1, main_col2 = st.columns([3, 1])  # 3:1 ratio for image:buttons
         
         with main_col1:
-            # Display stimulus
+            # Display stimulus first and get image dimensions
+            img_info = None
             if current_trial.get('stimulus_image'):
-                display_fullscreen_image(
+                img_info = display_fullscreen_image(
                     current_trial['stimulus_image'], 
                     caption=f"MTF: {current_trial['mtf_value']:.1f}%",
                     mtf_value=current_trial['mtf_value']
                 )
             else:
-                # Fallback pattern
-                st.markdown("### Test Pattern")
+                # Fallback pattern - also calculate dimensions for consistency
                 mtf_value = current_trial['mtf_value']
                 if 'test_pattern' not in st.session_state:
                     pattern = np.random.randint(0, 255, (400, 400, 3), dtype=np.uint8)
@@ -1135,30 +977,67 @@ def mtf_trial_screen():
                 else:
                     blurred = pattern
                 st.image(blurred, caption=f"Test Pattern (MTF: {mtf_value:.1f}%)", use_column_width=True)
+                
+                # Provide fallback image info for button positioning
+                img_info = {
+                    'display_height': 400,
+                    'center_position': 200,
+                    'original_width': 400,
+                    'original_height': 400
+                }
         
         with main_col2:
-            # Response buttons on the right side, vertically arranged
+            # Response buttons aligned with image center height
             if not st.session_state.mtf_response_recorded:
+                # Calculate button positioning based on EXACT image dimensions (no scaling)
+                if img_info and 'center_position' in img_info and img_info.get('no_scaling'):
+                    # Use exact pixel positioning - image is now displayed at full size
+                    center_pixels = img_info['center_position']
+                    # Convert to vh based on typical screen height, but more conservatively
+                    center_vh = (center_pixels / 1080) * 100
+                    padding_top = max(15, min(45, center_vh - 5))  # More range for exact positioning
+                else:
+                    # Fallback positioning
+                    padding_top = 30
+                
+                st.markdown(f"""
+                <div style="
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: flex-start;
+                    align-items: center;
+                    padding-top: {padding_top}vh;
+                    min-height: 70vh;
+                    gap: 20px;
+                ">
+                """, unsafe_allow_html=True)
+                
                 st.markdown("### Is this image clear?")
-                st.markdown("<br>", unsafe_allow_html=True)  # Add some space
                 
                 # Clear button
                 if st.button("✓ Clear", key=f"clear_{current_trial['trial_number']}", type="primary", use_container_width=True):
                     record_mtf_response_and_advance(current_trial, True)
                 
-                # Add significant spacing between buttons
-                st.markdown("<br><br><br>", unsafe_allow_html=True)  # 3 line breaks for spacing
-                
                 # Not Clear button
                 if st.button("✗ Not Clear", key=f"not_clear_{current_trial['trial_number']}", use_container_width=True):
                     record_mtf_response_and_advance(current_trial, False)
-        else:
-            # Response already recorded - this should not be reached due to immediate transition
-            st.markdown("---")
-            st.success("Response recorded! Proceeding to feedback...")
-            st.session_state.mtf_trial_phase = 'feedback'
-            st.session_state.mtf_phase_start_time = time.time()
-            st.rerun()
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                # Response already recorded - this should not be reached due to immediate transition
+                st.markdown("---")
+                st.success("Response recorded! Proceeding to feedback...")
+                st.session_state.mtf_trial_phase = 'feedback'
+                st.session_state.mtf_phase_start_time = time.time()
+                st.rerun()
+        
+        # Header information at the bottom
+        st.markdown("---")
+        st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
+        total_trials = exp_manager.max_trials
+        progress = current_trial['trial_number'] / total_trials
+        st.progress(progress)
+        st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
     
     # Phase 3: Show ADO feedback (1 second)
     elif st.session_state.mtf_trial_phase == 'feedback':
@@ -1878,24 +1757,13 @@ def main():
     # Show data storage info in sidebar
     show_data_storage_info()
     
-    experiment_type = st.session_state.get('experiment_type', 'Brightness Discrimination (2AFC)')
-    
-    # Handle different experiment stages
+    # Handle different experiment stages - MTF only
     if st.session_state.experiment_stage == 'welcome':
         welcome_screen()
     elif st.session_state.experiment_stage == 'ado_benchmark':
         ado_benchmark_screen()
     elif st.session_state.experiment_stage == 'instructions':
         instructions_screen()
-    elif st.session_state.experiment_stage == 'practice':
-        if experiment_type == "Brightness Discrimination (2AFC)":
-            practice_screen()
-        else:
-            # MTF experiments skip practice, go directly to trials
-            st.session_state.experiment_stage = 'mtf_trial'
-            st.rerun()
-    elif st.session_state.experiment_stage == 'experiment':
-        experiment_screen()
     elif st.session_state.experiment_stage == 'mtf_trial':
         mtf_trial_screen()
     elif st.session_state.experiment_stage == 'mtf_results':
