@@ -953,14 +953,18 @@ def mtf_trial_screen():
         st.session_state.mtf_feedback_start_time = None
     
     # Ensure all required session state variables exist
-    if 'mtf_phase_start_time' not in st.session_state:
-        st.session_state.mtf_phase_start_time = time.time()
+    # Note: Do NOT reset mtf_phase_start_time here to avoid timing issues
     if 'mtf_current_trial' not in st.session_state:
         st.session_state.mtf_current_trial = None
     if 'mtf_response_recorded' not in st.session_state:
         st.session_state.mtf_response_recorded = False
     
     current_time = time.time()
+    
+    # Safety check: if phase_start_time is missing, initialize it now
+    if 'mtf_phase_start_time' not in st.session_state:
+        st.session_state.mtf_phase_start_time = current_time
+    
     phase_elapsed = current_time - st.session_state.mtf_phase_start_time
     
     # Phase 1: Get new trial and show fixation cross (simplified)
@@ -976,6 +980,9 @@ def mtf_trial_screen():
         current_trial = st.session_state.mtf_current_trial
         
         # Show fixation cross with countdown - changed to 3 seconds
+        # Debug: Show timing info (uncomment to debug timing issues)
+        st.write(f"🔍 Debug: phase_elapsed = {phase_elapsed:.3f}s, target = 3.0s")
+        
         if phase_elapsed >= 3.0:
             # Countdown finished, auto-advance to stimulus
             st.session_state.mtf_trial_phase = 'stimulus'
