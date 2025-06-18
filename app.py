@@ -1016,8 +1016,7 @@ def mtf_trial_screen():
             </div>
             """, unsafe_allow_html=True)
             
-            # Auto-refresh every 100ms for smooth countdown
-            time.sleep(0.1)
+            # Auto-refresh for smooth countdown (no blocking sleep)
             st.rerun()
         
         # Header at the bottom
