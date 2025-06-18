@@ -630,7 +630,8 @@ def instructions_screen():
             st.session_state.experiment_stage = 'mtf_trial'
             # Reset MTF session state
             st.session_state.mtf_trial_phase = 'new_trial'
-            st.session_state.mtf_phase_start_time = time.time()
+            st.session_state.mtf_fixation_started = False
+            # mtf_phase_start_time will be set when fixation actually starts
             st.session_state.mtf_current_trial = None
             st.session_state.mtf_response_recorded = False
             st.rerun()
@@ -947,10 +948,11 @@ def mtf_trial_screen():
     # Initialize trial timing state
     if 'mtf_trial_phase' not in st.session_state:
         st.session_state.mtf_trial_phase = 'new_trial'
-        st.session_state.mtf_phase_start_time = time.time()
+        # Don't set mtf_phase_start_time here - will be set when fixation actually starts
         st.session_state.mtf_current_trial = None
         st.session_state.mtf_response_recorded = False
         st.session_state.mtf_feedback_start_time = None
+        st.session_state.mtf_fixation_started = False
     
     # Ensure all required session state variables exist
     # Note: Do NOT reset mtf_phase_start_time here to avoid timing issues
@@ -961,41 +963,80 @@ def mtf_trial_screen():
     
     current_time = time.time()
     
-    # Safety check: if phase_start_time is missing, initialize it now
-    if 'mtf_phase_start_time' not in st.session_state:
-        st.session_state.mtf_phase_start_time = current_time
-    
-    phase_elapsed = current_time - st.session_state.mtf_phase_start_time
-    
-    # Phase 1: Get new trial and show fixation cross (simplified)
+    # Phase 1: Show fixation cross while ADO computes in background
     if st.session_state.mtf_trial_phase == 'new_trial':
-        if st.session_state.mtf_current_trial is None:
-            current_trial = exp_manager.get_next_trial()
-            if current_trial is None:
-                st.session_state.experiment_stage = 'mtf_results'
-                st.rerun()
+        # Initialize ADO computation state if needed
+        if 'mtf_ado_computing' not in st.session_state:
+            st.session_state.mtf_ado_computing = False
+            st.session_state.mtf_ado_result = None
+        
+        # Start ADO computation in background if not already started
+        if not st.session_state.mtf_ado_computing and st.session_state.mtf_current_trial is None:
+            st.session_state.mtf_ado_computing = True
+            # Start computing next trial in background
+            try:
+                current_trial = exp_manager.get_next_trial()
+                if current_trial is None:
+                    st.session_state.experiment_stage = 'mtf_results'
+                    st.rerun()
+                    return
+                st.session_state.mtf_ado_result = current_trial
+                st.session_state.mtf_ado_computing = False
+            except Exception as e:
+                st.error(f"ADO computation failed: {e}")
+                st.session_state.mtf_ado_computing = False
                 return
-            st.session_state.mtf_current_trial = current_trial
         
-        current_trial = st.session_state.mtf_current_trial
+        # Start fixation timer only when we're ready to show fixation
+        if 'mtf_fixation_started' not in st.session_state:
+            st.session_state.mtf_fixation_started = False
         
-        # Show fixation cross with countdown - changed to 3 seconds
-        # Debug: Show timing info (uncomment to debug timing issues)
-        st.write(f"🔍 Debug: phase_elapsed = {phase_elapsed:.3f}s, target = 3.0s")
+        if not st.session_state.mtf_fixation_started:
+            st.session_state.mtf_fixation_started = True
+            st.session_state.mtf_phase_start_time = current_time
+            st.rerun()  # Refresh to start clean timing
+            return
         
-        if phase_elapsed >= 3.0:
-            # Countdown finished, auto-advance to stimulus
+        # Calculate elapsed time from when fixation actually started
+        phase_elapsed = current_time - st.session_state.mtf_phase_start_time
+        
+        # Check if both fixation time and ADO computation are complete
+        fixation_complete = phase_elapsed >= 3.0
+        ado_complete = not st.session_state.mtf_ado_computing and st.session_state.mtf_ado_result is not None
+        
+        # Show ADO computation status for debugging
+        if st.session_state.mtf_ado_computing:
+            ado_status = "🔄 Computing..."
+        elif ado_complete:
+            ado_status = "✅ Ready"
+        else:
+            ado_status = "⏳ Waiting"
+        
+        # Show fixation cross with countdown and ADO status
+        st.write(f"🔍 Debug: phase_elapsed = {phase_elapsed:.3f}s, target = 3.0s, ADO: {ado_status}")
+        
+        if fixation_complete and ado_complete:
+            # Both fixation and ADO are complete, advance to stimulus
+            st.session_state.mtf_current_trial = st.session_state.mtf_ado_result
             st.session_state.mtf_trial_phase = 'stimulus'
             st.session_state.mtf_phase_start_time = time.time()
             st.session_state.mtf_stimulus_onset_time = time.time()
+            # Reset ADO state for next trial
+            st.session_state.mtf_ado_computing = False
+            st.session_state.mtf_ado_result = None
             st.rerun()
-        else:
-            # Calculate remaining time for countdown
-            remaining_time = 3.0 - phase_elapsed
-            countdown_display = f"{remaining_time:.1f}"
-            
-            # Show fixation cross with countdown - centered in viewport
-            st.markdown(f"""
+        elif fixation_complete and not ado_complete:
+            # Fixation complete but ADO still computing - extend fixation
+            extended_time = phase_elapsed - 3.0
+            st.write(f"⏳ Waiting for computation... (+{extended_time:.1f}s)")
+        
+        # Always show fixation cross with countdown
+        # Calculate remaining time for countdown
+        remaining_time = max(0, 3.0 - phase_elapsed)
+        countdown_display = f"{remaining_time:.1f}"
+        
+        # Show fixation cross with countdown - centered in viewport
+        st.markdown(f"""
             <div style="
                 display: flex;
                 flex-direction: column;
@@ -1021,18 +1062,20 @@ def mtf_trial_screen():
                     font-weight: bold;
                 ">{countdown_display}s</div>
             </div>
-            """, unsafe_allow_html=True)
-            
-            # Auto-refresh for smooth countdown (no blocking sleep)
-            st.rerun()
+        """, unsafe_allow_html=True)
         
-        # Header at the bottom
-        st.markdown("---")
-        st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
-        total_trials = exp_manager.max_trials
-        progress = current_trial['trial_number'] / total_trials
-        st.progress(progress)
-        st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
+        # Auto-refresh for smooth countdown (no blocking sleep)
+        st.rerun()
+        
+        # Header at the bottom (only show if we have trial data)
+        if st.session_state.mtf_ado_result:
+            current_trial = st.session_state.mtf_ado_result
+            st.markdown("---")
+            st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
+            total_trials = exp_manager.max_trials
+            progress = current_trial['trial_number'] / total_trials
+            st.progress(progress)
+            st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
     
     # Phase 2: Show stimulus and accept responses (after 1 sec viewing)
     elif st.session_state.mtf_trial_phase == 'stimulus':
@@ -1041,7 +1084,8 @@ def mtf_trial_screen():
         if current_trial is None:
             st.error("Trial data missing, restarting...")
             st.session_state.mtf_trial_phase = 'new_trial'
-            st.session_state.mtf_phase_start_time = time.time()
+            st.session_state.mtf_fixation_started = False
+            # mtf_phase_start_time will be set when fixation actually starts
             st.rerun()
             return
         
@@ -1140,7 +1184,8 @@ def mtf_trial_screen():
         if current_trial is None:
             st.error("Trial data missing in feedback phase, restarting...")
             st.session_state.mtf_trial_phase = 'new_trial'
-            st.session_state.mtf_phase_start_time = time.time()
+            st.session_state.mtf_fixation_started = False
+            # mtf_phase_start_time will be set when fixation actually starts
             st.rerun()
             return
         
@@ -1184,7 +1229,8 @@ def mtf_trial_screen():
         if st.button("Continue to Next Trial →", type="primary", key="next_trial"):
             # Reset for next trial
             st.session_state.mtf_trial_phase = 'new_trial'
-            st.session_state.mtf_phase_start_time = time.time()
+            st.session_state.mtf_fixation_started = False
+            # mtf_phase_start_time will be set when fixation actually starts
             st.session_state.mtf_current_trial = None
             st.session_state.mtf_response_recorded = False
             if 'last_mtf_response' in st.session_state:
@@ -1242,7 +1288,8 @@ def record_mtf_response_and_advance(trial_data, is_clear):
     else:
         # Skip feedback, go directly to next trial
         st.session_state.mtf_trial_phase = 'new_trial'
-        st.session_state.mtf_phase_start_time = time.time()
+        st.session_state.mtf_fixation_started = False
+        # mtf_phase_start_time will be set when fixation actually starts
         st.session_state.mtf_current_trial = None
         st.session_state.mtf_response_recorded = False
         if 'last_mtf_response' in st.session_state:
