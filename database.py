@@ -48,6 +48,7 @@ class Trial(Base):
     stimulus_difference = Column(Float)
     mtf_value = Column(Float)  # For MTF experiments
     ado_stimulus_value = Column(Float)  # ADO selected value
+    stimulus_image_file = Column(String)  # Record which image file was used
     
     # Response data
     response = Column(String)  # 'left', 'right', 'clear', 'not_clear'
@@ -167,6 +168,7 @@ class DatabaseManager:
                 stimulus_difference=convert_numpy_value(trial_data.get('stimulus_difference')),
                 mtf_value=convert_numpy_value(trial_data.get('mtf_value')),
                 ado_stimulus_value=convert_numpy_value(trial_data.get('ado_stimulus_value')),
+                stimulus_image_file=trial_data.get('stimulus_image_file'),  # Record image file used
                 response=trial_data.get('response'),
                 is_correct=trial_data.get('is_correct'),
                 reaction_time=convert_numpy_value(trial_data.get('reaction_time')),

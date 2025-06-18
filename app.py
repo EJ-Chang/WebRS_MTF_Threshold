@@ -71,44 +71,41 @@ def crop_image_to_viewport(image_array, target_width=800, target_height=600):
     resized = cv2.resize(cropped, (target_width, target_height))
     return resized
 
-def display_fullscreen_image(image_data, caption="", mtf_value=None):
+def display_mtf_stimulus_image(image_data, caption=""):
     """
-    Display image in fullscreen mode with proper sizing
-    保持原始像素比例，根據視窗智能裁切中心區域
+    Display MTF stimulus image for the experiment
     Returns: dict with image dimensions for button positioning
     """
     if image_data is None:
+        st.error("❌ Stimulus image not available")
         return None
     
-    # If image_data is base64 string, decode it
-    if isinstance(image_data, str) and image_data.startswith('data:image'):
-        # Extract base64 data
-        base64_data = image_data.split(',')[1]
-        img_bytes = base64.b64decode(base64_data)
-        img = Image.open(BytesIO(img_bytes))
-        image_array = np.array(img)
+    # Process image data format
+    if isinstance(image_data, str):
+        if image_data.startswith('data:image'):
+            # Extract base64 data
+            base64_data = image_data.split(',')[1]
+            img_bytes = base64.b64decode(base64_data)
+            img = Image.open(BytesIO(img_bytes))
+            image_array = np.array(img)
+        else:
+            st.error("❌ Invalid image data format")
+            return None
     elif isinstance(image_data, np.ndarray):
         image_array = image_data
     else:
-        # Convert other types to numpy array
-        image_array = np.array(image_data)
+        try:
+            image_array = np.array(image_data)
+        except Exception as e:
+            st.error(f"❌ Failed to convert to numpy array: {e}")
+            return None
     
-    # Ensure we have a valid numpy array
     if not isinstance(image_array, np.ndarray):
-        st.error("無法處理圖片格式")
+        st.error("❌ Invalid image array")
         return None
     
-    # 保持原始長寬比，避免因容器限制而變形
-    h, w = image_array.shape[:2]
-    
-    # 移除強制裁切，讓CSS控制顯示大小來保持比例
-    # 這樣圖片的像素尺寸保持不變，由瀏覽器負責縮放
+    # Process the image for display
     processed_img = image_array
-    
-    # 註解掉的舊邏輯（會改變長寬比）:
-    # max_display_width = 1400
-    # max_display_height = 1000
-    # 這種裁切方式會破壞原始比例，改由CSS處理
     
     # Convert to PIL for display
     img_pil = Image.fromarray(processed_img)
@@ -118,40 +115,34 @@ def display_fullscreen_image(image_data, caption="", mtf_value=None):
     img_pil.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
     
-    # Display using HTML with NO SCALING - preserve exact pixel dimensions
-    # Add unique ID for JavaScript positioning calculation
+    # Add unique ID for positioning calculation
     img_id = f"mtf_img_{int(time.time() * 1000)}"
     final_h, final_w = processed_img.shape[:2]
     
+    # Clean HTML for stimulus display
     html_content = f"""
-    <div id="img_container_{img_id}" style="text-align: center; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; align-items: center; overflow: auto;">
+    <div style="text-align: center; margin: 20px 0;">
         <img id="{img_id}" src="data:image/png;base64,{img_str}" 
-             style="width: {final_w}px; height: {final_h}px; object-fit: none; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;"
-             onload="window.mtf_img_height = this.clientHeight; window.mtf_img_center = this.offsetTop + this.clientHeight/2;">
-        <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">{caption}</p>
+             style="max-width: 100%; height: auto;">
+        <p style="margin: 10px 0; color: #666; font-size: 14px;">{caption}</p>
     </div>
-    <script>
-        // Store image center position for button alignment
-        window.getMTFImageCenter = function() {{
-            var img = document.getElementById('{img_id}');
-            if (img) {{
-                return img.offsetTop + img.clientHeight / 2;
-            }}
-            return {final_h // 2}; // fallback to calculated center
-        }};
-        console.log('MTF Image displayed at exact size: {final_w}x{final_h}px');
-    </script>
     """
     st.markdown(html_content, unsafe_allow_html=True)
     
-    # Return EXACT image dimensions for button positioning - no scaling calculations
+    # Return image dimensions for button positioning
     return {
-        'display_height': final_h,  # Exact pixel height
-        'center_position': final_h / 2,  # Exact pixel center
+        'display_height': final_h,
+        'center_position': final_h / 2,
         'original_width': final_w,
         'original_height': final_h,
-        'no_scaling': True  # Flag to confirm no scaling applied
+        'no_scaling': True
     }
+
+def display_fullscreen_image(image_data, caption=""):
+    """
+    Legacy function - redirect to MTF stimulus display
+    """
+    return display_mtf_stimulus_image(image_data, caption)
 
 def display_ado_monitor(exp_manager, trial_number):
     """
@@ -208,7 +199,7 @@ def display_ado_monitor(exp_manager, trial_number):
                     entropy = exp_manager.get_ado_entropy()
                     st.metric("後驗熵值", f"{entropy:.3f}")
                     st.caption("熵值越低 = 不確定性越小")
-                except:
+                except Exception:
                     st.caption("計算優化指標中...")
             
             # Parameter evolution
@@ -290,7 +281,7 @@ def plot_psychometric_function(trial_data):
                 line_color="orange",
                 annotation_text=f"Est. Threshold: {threshold_estimate:.3f}"
             )
-        except:
+        except Exception:
             pass
     
     # Update layout
@@ -322,7 +313,7 @@ def plot_psychometric_function(trial_data):
             try:
                 threshold_est = np.interp(0.75, grouped['accuracy'], grouped['stimulus_difference'])
                 st.metric("75% Threshold", f"{threshold_est:.3f}")
-            except:
+            except Exception:
                 st.metric("75% Threshold", "N/A")
         else:
             st.metric("75% Threshold", "N/A")
@@ -385,7 +376,7 @@ def welcome_screen():
     # Get available images
     stimuli_dir = "stimuli_preparation"
     available_images = []
-    image_files = ["stimuli_img.png", "text_img.png"]  # Known image files
+    image_files = ["stimuli_img.png", "text_img.png", "tw_newsimg.png", "us_newsimg.png"]  # Known image files
     
     for img_file in image_files:
         img_path = os.path.join(stimuli_dir, img_file)
@@ -398,7 +389,6 @@ def welcome_screen():
         # Create columns for image preview
         cols = st.columns(len(available_images))
         
-        selected_image = None
         for i, (img_name, img_path) in enumerate(available_images):
             with cols[i]:
                 # Display thumbnail with proper aspect ratio preservation
@@ -419,12 +409,20 @@ def welcome_screen():
                     img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
                     
                     # Display with fixed width to ensure consistent layout
-                    st.image(img_resized, caption=img_name.replace('.png', ''), width=new_width)
+                    # Create descriptive captions
+                    caption_map = {
+                        'stimuli_img.png': 'Original Stimulus',
+                        'text_img.png': 'Text Image',
+                        'tw_newsimg.png': 'Taiwan News',
+                        'us_newsimg.png': 'US News'
+                    }
+                    display_name = caption_map.get(img_name, img_name.replace('.png', ''))
+                    
+                    st.image(img_resized, caption=display_name, width=new_width)
                     st.caption(f"Size: {original_width}×{original_height}")
                     
                     # Selection button
-                    if st.button(f"Select {img_name.replace('.png', '')}", key=f"select_{img_name}"):
-                        selected_image = img_path
+                    if st.button(f"Select {display_name}", key=f"select_{img_name}"):
                         st.session_state.selected_stimulus_image = img_path
                         st.rerun()
                 except Exception as e:
@@ -432,7 +430,14 @@ def welcome_screen():
         
         # Show current selection
         if 'selected_stimulus_image' in st.session_state:
-            selected_name = os.path.basename(st.session_state.selected_stimulus_image).replace('.png', '')
+            selected_filename = os.path.basename(st.session_state.selected_stimulus_image)
+            caption_map = {
+                'stimuli_img.png': 'Original Stimulus',
+                'text_img.png': 'Text Image',
+                'tw_newsimg.png': 'Taiwan News',
+                'us_newsimg.png': 'US News'
+            }
+            selected_name = caption_map.get(selected_filename, selected_filename.replace('.png', ''))
             st.success(f"✅ Selected stimulus: **{selected_name}**")
         else:
             st.info("👆 Please select a stimulus image above")
@@ -526,6 +531,26 @@ def welcome_screen():
             st.subheader("Psychometric Function from Uploaded Data")
             plot_psychometric_function(trial_data)
             
+            # Show stimulus image information if available
+            if 'stimulus_image_file' in df.columns:
+                stimulus_files = df['stimulus_image_file'].dropna().unique()
+                if len(stimulus_files) > 0:
+                    # Create descriptive names for display
+                    caption_map = {
+                        'stimuli_img.png': 'Original Stimulus',
+                        'text_img.png': 'Text Image',
+                        'tw_newsimg.png': 'Taiwan News',
+                        'us_newsimg.png': 'US News',
+                        'test_pattern': 'Test Pattern'
+                    }
+                    
+                    stimulus_info = []
+                    for file in stimulus_files:
+                        display_name = caption_map.get(file, file)
+                        stimulus_info.append(f"**{display_name}** ({file})")
+                    
+                    st.info(f"📸 Stimulus images used: {', '.join(stimulus_info)}")
+            
             # Show summary statistics
             if 'is_correct' in df.columns:
                 col1, col2, col3 = st.columns(3)
@@ -572,7 +597,7 @@ def instructions_screen():
                 img = Image.open(st.session_state.selected_stimulus_image)
                 img.thumbnail((150, 150))
                 st.image(img, caption=os.path.basename(st.session_state.selected_stimulus_image).replace('.png', ''))
-            except:
+            except Exception:
                 st.text("Preview not available")
         with col2:
             st.subheader("Task Description")
@@ -681,7 +706,7 @@ def run_trial(is_practice=False):
         st.info(f"DEBUG: Left={left_val:.3f}, Right={right_val:.3f}, Correct={expected_correct}")
     
     # Create stimulus display
-    col1, col2, col3 = st.columns([1, 2, 1])
+    _, col2, _ = st.columns([1, 2, 1])
     
     with col2:
         # Display stimuli side by side
@@ -741,7 +766,7 @@ def run_trial(is_practice=False):
     
     # Response buttons
     st.markdown("---")
-    col1, col2, col3 = st.columns([1, 2, 1])
+    _, col2, _ = st.columns([1, 2, 1])
     
     with col2:
         button_col1, button_col2 = st.columns(2)
@@ -765,7 +790,7 @@ def run_trial(is_practice=False):
 
 
 
-def save_experiment_data(trial_result, is_practice=False):
+def save_experiment_data(trial_result):
     """Save experiment data to CSV file"""
     try:
         if 'csv_manager' not in st.session_state:
@@ -849,7 +874,7 @@ def record_response(response, trial_data, is_practice=False):
     exp_manager.record_trial(trial_result, is_practice)
     
     # Auto-save data after each trial
-    save_experiment_data(trial_result, is_practice)
+    save_experiment_data(trial_result)
     
     # Reset trial state to allow new trial generation
     st.session_state.trial_start_time = None
@@ -957,8 +982,6 @@ def mtf_trial_screen():
     if 'mtf_response_recorded' not in st.session_state:
         st.session_state.mtf_response_recorded = False
     
-    current_time = time.time()
-    
     # Phase 1: Show fixation cross and wait 3 seconds with Python timing
     if st.session_state.mtf_trial_phase == 'new_trial':
         # Get next trial if not already available
@@ -973,7 +996,7 @@ def mtf_trial_screen():
         current_trial = st.session_state.mtf_current_trial
         
         # Show fixation cross - no countdown needed
-        st.markdown(f"""
+        st.markdown("""
         <div style="
             display: flex;
             flex-direction: column;
@@ -1027,17 +1050,20 @@ def mtf_trial_screen():
         with main_col1:
             # Display stimulus first and get image dimensions
             img_info = None
-            if current_trial.get('stimulus_image'):
-                img_info = display_fullscreen_image(
-                    current_trial['stimulus_image'], 
-                    caption=f"MTF: {current_trial['mtf_value']:.1f}%",
-                    mtf_value=current_trial['mtf_value']
+            stimulus_image = current_trial.get('stimulus_image')
+            
+            # Display stimulus image
+            if stimulus_image and isinstance(stimulus_image, str) and stimulus_image.startswith('data:image'):
+                img_info = display_mtf_stimulus_image(
+                    stimulus_image, 
+                    caption=f"MTF: {current_trial['mtf_value']:.1f}%"
                 )
             else:
-                # Fallback pattern - also calculate dimensions for consistency
+                # Fallback: use test pattern if no valid stimulus image
                 mtf_value = current_trial['mtf_value']
                 if 'test_pattern' not in st.session_state:
-                    pattern = np.random.randint(0, 255, (400, 400, 3), dtype=np.uint8)
+                    rng = np.random.default_rng(42)  # Fixed seed for reproducibility
+                    pattern = rng.integers(0, 255, (400, 400, 3), dtype=np.uint8)
                     st.session_state.test_pattern = pattern
                 
                 pattern = st.session_state.test_pattern.copy()
@@ -1149,7 +1175,7 @@ def mtf_trial_screen():
                             st.metric("Next MTF", f"{next_mtf:.1f}%")
                         else:
                             st.metric("Next MTF", "Computing...")
-                    except:
+                    except Exception:
                         st.metric("Next MTF", "Ready")
                 else:
                     st.metric("Status", "Complete!")
@@ -1201,7 +1227,7 @@ def record_mtf_response_and_advance(trial_data, is_clear):
     
     # Record and save
     exp_manager.record_response(trial_data, is_clear, reaction_time)
-    save_experiment_data(mtf_trial_result, is_practice=False)
+    save_experiment_data(mtf_trial_result)
     
     # Check if we should show feedback or go directly to next trial
     show_feedback = st.session_state.get('show_trial_feedback', True)
@@ -1237,9 +1263,6 @@ def record_mtf_response_smooth(trial_data, is_clear):
     raw_rt = response_time - st.session_state.mtf_precise_stimulus_onset
     exp_manager = st.session_state.mtf_experiment_manager
     
-    # Get estimates before update
-    old_estimates = exp_manager.get_current_estimates() if trial_data['trial_number'] > 1 else None
-    
     # Create trial result for data saving - ensure proper data types
     mtf_trial_result = {
         'trial_number': int(trial_data['trial_number']),
@@ -1260,7 +1283,7 @@ def record_mtf_response_smooth(trial_data, is_clear):
     )
     
     # Auto-save MTF data
-    save_experiment_data(mtf_trial_result, is_practice=False)
+    save_experiment_data(mtf_trial_result)
     
     # Get estimates after update
     new_estimates = exp_manager.get_current_estimates()
@@ -1295,7 +1318,7 @@ def record_mtf_response_smooth(trial_data, is_clear):
                 try:
                     next_mtf = exp_manager.ado_engine.get_optimal_design()
                     st.metric("Next MTF", f"{next_mtf:.1f}%")
-                except:
+                except Exception:
                     st.metric("Next MTF", "...")
             else:
                 completion_text = "Complete!" if exp_manager.is_experiment_complete() else "Preparing..."
@@ -1322,9 +1345,6 @@ def record_mtf_response(trial_data, is_clear):
     reaction_time = time.time() - st.session_state.mtf_stimulus_onset_time
     exp_manager = st.session_state.mtf_experiment_manager
     
-    # Get estimates before update
-    old_estimates = exp_manager.get_current_estimates() if trial_data['trial_number'] > 1 else None
-    
     # Create trial result for data saving
     mtf_trial_result = {
         'trial_number': trial_data['trial_number'],
@@ -1340,7 +1360,7 @@ def record_mtf_response(trial_data, is_clear):
     exp_manager.record_response(trial_data, is_clear, reaction_time)
     
     # Auto-save MTF data
-    save_experiment_data(mtf_trial_result, is_practice=False)
+    save_experiment_data(mtf_trial_result)
     
     # Get estimates after update
     new_estimates = exp_manager.get_current_estimates()
@@ -1371,7 +1391,7 @@ def record_mtf_response(trial_data, is_clear):
                 # Preview next optimal design
                 next_mtf = exp_manager.ado_engine.get_optimal_design()
                 st.metric("Next MTF", f"{next_mtf:.1f}%")
-            except:
+            except Exception:
                 st.metric("Next MTF", "Computing...")
         else:
             st.metric("Next MTF", "Complete" if exp_manager.is_experiment_complete() else "N/A")
@@ -1381,7 +1401,7 @@ def record_mtf_response(trial_data, is_clear):
         try:
             entropy = exp_manager.get_ado_entropy()
             st.caption(f"Posterior Entropy: {entropy:.3f} (lower = more certain)")
-        except:
+        except Exception:
             pass
     
     # Convergence status
@@ -1448,6 +1468,20 @@ def mtf_results_screen():
             
             convergence_status = "Yes" if summary.get('converged', False) else "No"
             st.info(f"Experiment converged: {convergence_status}")
+        
+        # Show stimulus image information
+        stimulus_file = summary.get('stimulus_image_file', 'unknown')
+        if stimulus_file != 'unknown':
+            # Create descriptive name for display
+            caption_map = {
+                'stimuli_img.png': 'Original Stimulus',
+                'text_img.png': 'Text Image',
+                'tw_newsimg.png': 'Taiwan News',
+                'us_newsimg.png': 'US News',
+                'test_pattern': 'Test Pattern'
+            }
+            display_name = caption_map.get(stimulus_file, stimulus_file)
+            st.info(f"📸 Stimulus used: **{display_name}** ({stimulus_file})")
     
     # Generate psychometric function for MTF data
     st.subheader("Your MTF Function")
@@ -1547,7 +1581,7 @@ def plot_mtf_psychometric_function(trial_data):
                 line_color="orange",
                 annotation_text=f"Est. Threshold: {threshold_estimate:.1f}%"
             )
-        except:
+        except Exception:
             pass
     
     fig.update_layout(
@@ -1657,7 +1691,8 @@ def ado_benchmark_screen():
                 trial_times.append(trial_time)
                 
                 # Simulate response for next iteration
-                response = np.random.choice([0, 1])
+                rng = np.random.default_rng(i)  # Use iteration as seed for reproducibility
+                response = rng.choice([0, 1])
                 ado_engine.update_posterior(optimal_mtf, response)
             
             progress_bar.progress(100)
@@ -1667,7 +1702,6 @@ def ado_benchmark_screen():
             mean_time = np.mean(trial_times)
             max_time = np.max(trial_times)
             min_time = np.min(trial_times)
-            std_time = np.std(trial_times)
             
             # Display results
             with results_container.container():

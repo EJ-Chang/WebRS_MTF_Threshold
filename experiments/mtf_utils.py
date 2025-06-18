@@ -102,8 +102,8 @@ def load_and_prepare_image(image_path, use_right_half=True):
     """載入圖片並準備用於 MTF 處理
     
     載入圖片檔案，轉換為 RGB 格式，並根據圖片類型選擇不同的裁切方式。
-    - 一般圖片 (stimuli_img.png): 取右半邊
-    - 文字圖片 (text_img.png): 取中央部分，裁切左右兩側
+    - stimuli_img.png: 取右半邊（保持原有行為）
+    - 其他圖片 (text_img.png, tw_newsimg.png, us_newsimg.png): 取中央部分，裁切左右兩側
     
     Args:
         image_path (str): 圖片檔案路徑
@@ -143,8 +143,14 @@ def load_and_prepare_image(image_path, use_right_half=True):
         # 檢查是否為文字圖片
         image_name = os.path.basename(image_path).lower()
         
-        if 'text' in image_name:
-            # 文字圖片：取中央部分，裁切左右兩側，輸出尺寸與右半邊相同
+        if 'stimuli_img' in image_name:
+            # 原始stimuli_img：取右半邊（保持原有行為）
+            width = img_rgb.shape[1]
+            mid_point = width // 2
+            img_rgb = img_rgb[:, mid_point:]
+            print(f"stimuli_img裁切：從 {width} 取右半邊，結果寬度 {img_rgb.shape[1]}")
+        else:
+            # 其他圖片（text_img, tw_newsimg, us_newsimg）：取中央部分
             height, width = img_rgb.shape[:2]
             target_width = width // 2  # 目標寬度為原圖的一半
             
@@ -158,13 +164,7 @@ def load_and_prepare_image(image_path, use_right_half=True):
             end_x = min(width, end_x)
             
             img_rgb = img_rgb[:, start_x:end_x]
-            print(f"文字圖片裁切：從 {width}x{height} 裁切中央部分到 {img_rgb.shape[1]}x{img_rgb.shape[0]}")
-        else:
-            # 一般圖片：取右半邊
-            width = img_rgb.shape[1]
-            mid_point = width // 2
-            img_rgb = img_rgb[:, mid_point:]
-            print(f"一般圖片裁切：從 {width} 取右半邊，結果寬度 {img_rgb.shape[1]}")
+            print(f"{image_name}裁切：從 {width}x{height} 裁切中央部分到 {img_rgb.shape[1]}x{img_rgb.shape[0]}")
     
     return img_rgb
 

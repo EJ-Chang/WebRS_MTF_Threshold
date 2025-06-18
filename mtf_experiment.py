@@ -55,11 +55,16 @@ except ImportError as e:
         if img is not None:
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             if use_right_half:
-                # Check if this is a text image
+                # Check image type for cropping strategy
                 image_name = os.path.basename(path).lower()
                 
-                if 'text' in image_name:
-                    # Text image: take center portion, crop left and right sides
+                if 'stimuli_img' in image_name:
+                    # Original stimuli_img: take right half (original behavior)
+                    width = img_rgb.shape[1]
+                    mid_point = width // 2
+                    img_rgb = img_rgb[:, mid_point:]
+                else:
+                    # All other images (text_img, tw_newsimg, us_newsimg): take center portion
                     height, width = img_rgb.shape[:2]
                     target_width = width // 2  # Target width is half of original
                     
@@ -73,11 +78,6 @@ except ImportError as e:
                     end_x = min(width, end_x)
                     
                     img_rgb = img_rgb[:, start_x:end_x]
-                else:
-                    # Regular image: take right half
-                    width = img_rgb.shape[1]
-                    mid_point = width // 2
-                    img_rgb = img_rgb[:, mid_point:]
             return img_rgb
         return None
     
@@ -574,7 +574,7 @@ class MTFExperimentManager:
         """
         try:
             if self.base_image is None:
-                print("No base image available")
+                print("⚠️ No base image available")
                 return None
             
             # 首先檢查緩存
@@ -584,6 +584,10 @@ class MTFExperimentManager:
                 
             # 如果沒有緩存，即時生成
             img_mtf = apply_mtf_to_image(self.base_image, mtf_value)
+            
+            if img_mtf is None:
+                print("⚠️ Warning: apply_mtf_to_image returned None")
+                return None
             
             # Convert to PIL Image
             img_pil = Image.fromarray(img_mtf)
@@ -601,7 +605,7 @@ class MTFExperimentManager:
             return image_data
             
         except Exception as e:
-            print(f"Error generating stimulus: {e}")
+            print(f"⚠️ Error generating stimulus: {e}")
             return None
     
     def get_next_trial(self) -> Optional[Dict]:
@@ -624,6 +628,9 @@ class MTFExperimentManager:
         # Generate stimulus image
         stimulus_image = self.generate_stimulus_image(mtf_value)
         
+        if stimulus_image is None:
+            print(f"⚠️ Failed to generate stimulus image for MTF {mtf_value:.1f}%")
+        
         # 在背景預載可能的下一個MTF值
         current_estimates = self.get_current_estimates()
         if current_estimates and self.base_image is not None:
@@ -632,10 +639,18 @@ class MTFExperimentManager:
             except Exception as e:
                 print(f"Preloading error: {e}")
         
+        # Get stimulus image name for recording
+        stimulus_image_name = "unknown"
+        if self.base_image_path and self.base_image_path != "test_pattern":
+            stimulus_image_name = os.path.basename(self.base_image_path)
+        elif self.base_image_path == "test_pattern":
+            stimulus_image_name = "test_pattern"
+        
         trial_data = {
             'trial_number': self.current_trial,
             'mtf_value': mtf_value,
             'stimulus_image': stimulus_image,
+            'stimulus_image_file': stimulus_image_name,  # 記錄使用的圖片檔名
             'timestamp': datetime.now().isoformat(),
             'precise_onset_time': None  # 會在顯示時設定
         }
@@ -747,6 +762,13 @@ class MTFExperimentManager:
         # Get final estimates
         final_estimates = self.get_current_estimates()
         
+        # Get stimulus image name for summary
+        stimulus_image_name = "unknown"
+        if self.base_image_path and self.base_image_path != "test_pattern":
+            stimulus_image_name = os.path.basename(self.base_image_path)
+        elif self.base_image_path == "test_pattern":
+            stimulus_image_name = "test_pattern"
+        
         return {
             'total_trials': total_trials,
             'clear_responses': clear_responses,
@@ -755,7 +777,8 @@ class MTFExperimentManager:
             'converged': self.converged,
             'final_threshold': final_estimates.get('threshold_mean', np.nan),
             'threshold_uncertainty': final_estimates.get('threshold_sd', np.nan),
-            'participant_id': self.participant_id
+            'participant_id': self.participant_id,
+            'stimulus_image_file': stimulus_image_name  # 記錄使用的圖片檔名
         }
     
     def get_ado_entropy(self) -> float:
