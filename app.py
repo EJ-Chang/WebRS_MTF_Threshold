@@ -20,14 +20,21 @@ import os
 # 環境檢測：根據不同環境設定不同端口
 def detect_environment():
     """檢測當前運行環境並設定相應的端口"""
+    import platform
+    
     # 檢查是否在 Replit 環境
     if os.path.exists('/home/runner') or 'REPL_ID' in os.environ:
         # Replit 環境
         os.environ['STREAMLIT_SERVER_PORT'] = '5000'
         os.environ['STREAMLIT_SERVER_ADDRESS'] = '0.0.0.0'
         print("🌐 檢測到 Replit 環境，使用端口 5000")
+    elif platform.system() == 'Linux' and 'ubuntu' in platform.platform().lower():
+        # Ubuntu Server 環境 (非Replit)
+        os.environ['STREAMLIT_SERVER_PORT'] = '3838'
+        os.environ['STREAMLIT_SERVER_ADDRESS'] = '0.0.0.0'
+        print("🖥️ 檢測到 Ubuntu Server 環境，使用端口 3838 (共用 R Shiny port)")
     else:
-        # 本地環境
+        # 本地環境 (Windows/macOS)
         os.environ['STREAMLIT_SERVER_PORT'] = '8501'
         os.environ['STREAMLIT_SERVER_ADDRESS'] = 'localhost'
         # print("💻 檢測到本地環境，使用端口 8501")  # 已關閉控制台輸出
@@ -1215,6 +1222,11 @@ def record_mtf_response_and_advance(trial_data, is_clear):
     exp_manager = st.session_state.mtf_experiment_manager
     
     # Create trial result
+    # Get stimulus image file name
+    stimulus_image_file = "unknown"
+    if 'selected_stimulus_image' in st.session_state and st.session_state.selected_stimulus_image:
+        stimulus_image_file = os.path.basename(st.session_state.selected_stimulus_image)
+    
     mtf_trial_result = {
         'trial_number': int(trial_data['trial_number']),
         'mtf_value': float(trial_data['mtf_value']),
@@ -1222,7 +1234,8 @@ def record_mtf_response_and_advance(trial_data, is_clear):
         'reaction_time': float(reaction_time),
         'timestamp': datetime.now().isoformat(),
         'participant_id': st.session_state.get('participant_id', 'unknown'),
-        'experiment_type': 'MTF_Clarity'
+        'experiment_type': 'MTF_Clarity',
+        'stimulus_image_file': stimulus_image_file  # 記錄使用的圖片檔名
     }
     
     # Record and save
@@ -1264,6 +1277,11 @@ def record_mtf_response_smooth(trial_data, is_clear):
     exp_manager = st.session_state.mtf_experiment_manager
     
     # Create trial result for data saving - ensure proper data types
+    # Get stimulus image file name
+    stimulus_image_file = "unknown"
+    if 'selected_stimulus_image' in st.session_state and st.session_state.selected_stimulus_image:
+        stimulus_image_file = os.path.basename(st.session_state.selected_stimulus_image)
+    
     mtf_trial_result = {
         'trial_number': int(trial_data['trial_number']),
         'mtf_value': float(trial_data['mtf_value']),
@@ -1271,7 +1289,8 @@ def record_mtf_response_smooth(trial_data, is_clear):
         'reaction_time': float(raw_rt),  # Ensure it's a standard Python float
         'timestamp': datetime.now().isoformat(),
         'participant_id': st.session_state.get('participant_id', 'unknown'),
-        'experiment_type': 'MTF_Clarity'
+        'experiment_type': 'MTF_Clarity',
+        'stimulus_image_file': stimulus_image_file  # 記錄使用的圖片檔名
     }
     
     # Record the response with precise timing
@@ -1346,6 +1365,11 @@ def record_mtf_response(trial_data, is_clear):
     exp_manager = st.session_state.mtf_experiment_manager
     
     # Create trial result for data saving
+    # Get stimulus image file name
+    stimulus_image_file = "unknown"
+    if 'selected_stimulus_image' in st.session_state and st.session_state.selected_stimulus_image:
+        stimulus_image_file = os.path.basename(st.session_state.selected_stimulus_image)
+    
     mtf_trial_result = {
         'trial_number': trial_data['trial_number'],
         'mtf_value': trial_data['mtf_value'],
@@ -1353,7 +1377,8 @@ def record_mtf_response(trial_data, is_clear):
         'reaction_time': reaction_time,
         'timestamp': datetime.now().isoformat(),
         'participant_id': st.session_state.get('participant_id', 'unknown'),
-        'experiment_type': 'MTF_Clarity'
+        'experiment_type': 'MTF_Clarity',
+        'stimulus_image_file': stimulus_image_file  # 記錄使用的圖片檔名
     }
     
     # Record the response
