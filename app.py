@@ -10,7 +10,7 @@ import plotly.express as px
 from experiment import ExperimentManager
 from data_manager import DataManager
 from mtf_experiment import MTFExperimentManager
-from database import DatabaseManager
+from csv_data_manager import CSVDataManager
 import cv2
 from PIL import Image
 import base64
@@ -768,16 +768,16 @@ def run_trial(is_practice=False):
 
 
 def save_experiment_data(trial_result, is_practice=False):
-    """Save experiment data to database"""
+    """Save experiment data to CSV file"""
     try:
-        if 'db_manager' not in st.session_state:
-            st.session_state.db_manager = DatabaseManager()
+        if 'csv_manager' not in st.session_state:
+            st.session_state.csv_manager = CSVDataManager()
         
-        db = st.session_state.db_manager
+        csv_manager = st.session_state.csv_manager
         
-        # Get current experiment ID from session
-        experiment_id = st.session_state.get('current_experiment_id')
-        if not experiment_id:
+        # Get participant ID from session
+        participant_id = st.session_state.get('participant_id')
+        if not participant_id:
             # Create new experiment if not exists
             participant_id = st.session_state.get('participant_id', 'unknown')
             experiment_type = st.session_state.get('experiment_type', 'unknown')
@@ -1821,15 +1821,15 @@ def ado_benchmark_screen():
 
 # Main app logic
 def show_data_storage_info():
-    """Display information about database storage"""
+    """Display information about CSV data storage"""
     st.sidebar.markdown("---")
-    st.sidebar.subheader("🗄️ Database Storage")
+    st.sidebar.subheader("📁 CSV Data Storage")
     
     try:
-        if 'db_manager' not in st.session_state:
-            st.session_state.db_manager = DatabaseManager()
+        if 'csv_manager' not in st.session_state:
+            st.session_state.csv_manager = CSVDataManager()
         
-        db = st.session_state.db_manager
+        csv_manager = st.session_state.csv_manager
         
         # Show current experiment info
         if 'current_experiment_id' in st.session_state:
