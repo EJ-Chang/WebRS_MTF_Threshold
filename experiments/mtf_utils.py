@@ -101,7 +101,9 @@ def normalize_for_psychopy(image):
 def load_and_prepare_image(image_path, use_right_half=True):
     """載入圖片並準備用於 MTF 處理
     
-    載入圖片檔案，轉換為 RGB 格式，並可選擇是否只取右半邊。
+    載入圖片檔案，轉換為 RGB 格式，並根據圖片類型選擇不同的裁切方式。
+    - 一般圖片 (stimuli_img.png): 取右半邊
+    - 文字圖片 (text_img.png): 取中央部分，裁切左右兩側
     
     Args:
         image_path (str): 圖片檔案路徑
@@ -115,8 +117,10 @@ def load_and_prepare_image(image_path, use_right_half=True):
         ValueError: 當圖片無法正確載入時
         
     Example:
-        >>> # 一般用途
+        >>> # 一般圖片用途
         >>> base_img = load_and_prepare_image('stimuli_img.png')
+        >>> # 文字圖片用途
+        >>> text_img = load_and_prepare_image('text_img.png')
         >>> img_mtf = apply_mtf_to_image(base_img, 45.0)
     """
     
@@ -134,11 +138,33 @@ def load_and_prepare_image(image_path, use_right_half=True):
     else:
         raise ValueError("不支援的圖片格式")
     
-    # 是否只取右半邊
+    # 根據圖片類型和參數決定裁切方式
     if use_right_half:
-        width = img_rgb.shape[1]
-        mid_point = width // 2
-        img_rgb = img_rgb[:, mid_point:]
+        # 檢查是否為文字圖片
+        image_name = os.path.basename(image_path).lower()
+        
+        if 'text' in image_name:
+            # 文字圖片：取中央部分，裁切左右兩側，輸出尺寸與右半邊相同
+            height, width = img_rgb.shape[:2]
+            target_width = width // 2  # 目標寬度為原圖的一半
+            
+            # 計算中央區域的起始和結束位置
+            center_x = width // 2
+            start_x = center_x - target_width // 2
+            end_x = start_x + target_width
+            
+            # 確保不超出圖片邊界
+            start_x = max(0, start_x)
+            end_x = min(width, end_x)
+            
+            img_rgb = img_rgb[:, start_x:end_x]
+            print(f"文字圖片裁切：從 {width}x{height} 裁切中央部分到 {img_rgb.shape[1]}x{img_rgb.shape[0]}")
+        else:
+            # 一般圖片：取右半邊
+            width = img_rgb.shape[1]
+            mid_point = width // 2
+            img_rgb = img_rgb[:, mid_point:]
+            print(f"一般圖片裁切：從 {width} 取右半邊，結果寬度 {img_rgb.shape[1]}")
     
     return img_rgb
 

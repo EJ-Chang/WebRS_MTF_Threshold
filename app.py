@@ -379,7 +379,69 @@ def welcome_screen():
         help="Enter a unique identifier (e.g., your initials + date)"
     )
     
-    # MTF experiment configuration only
+    # Stimulus image selection
+    st.subheader("Stimulus Image Selection")
+    
+    # Get available images
+    stimuli_dir = "stimuli_preparation"
+    available_images = []
+    image_files = ["stimuli_img.png", "text_img.png"]  # Known image files
+    
+    for img_file in image_files:
+        img_path = os.path.join(stimuli_dir, img_file)
+        if os.path.exists(img_path):
+            available_images.append((img_file, img_path))
+    
+    if available_images:
+        st.write("Select the stimulus image for your experiment:")
+        
+        # Create columns for image preview
+        cols = st.columns(len(available_images))
+        
+        selected_image = None
+        for i, (img_name, img_path) in enumerate(available_images):
+            with cols[i]:
+                # Display thumbnail with proper aspect ratio preservation
+                try:
+                    from PIL import Image
+                    img = Image.open(img_path)
+                    
+                    # Calculate proper thumbnail size maintaining aspect ratio
+                    original_width, original_height = img.size
+                    max_size = 200
+                    
+                    # Calculate scaling factor to fit within max_size while preserving aspect ratio
+                    scale_factor = min(max_size / original_width, max_size / original_height)
+                    new_width = int(original_width * scale_factor)
+                    new_height = int(original_height * scale_factor)
+                    
+                    # Resize image maintaining aspect ratio
+                    img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    
+                    # Display with fixed width to ensure consistent layout
+                    st.image(img_resized, caption=img_name.replace('.png', ''), width=new_width)
+                    st.caption(f"Size: {original_width}×{original_height}")
+                    
+                    # Selection button
+                    if st.button(f"Select {img_name.replace('.png', '')}", key=f"select_{img_name}"):
+                        selected_image = img_path
+                        st.session_state.selected_stimulus_image = img_path
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error loading {img_name}: {e}")
+        
+        # Show current selection
+        if 'selected_stimulus_image' in st.session_state:
+            selected_name = os.path.basename(st.session_state.selected_stimulus_image).replace('.png', '')
+            st.success(f"✅ Selected stimulus: **{selected_name}**")
+        else:
+            st.info("👆 Please select a stimulus image above")
+    else:
+        st.warning("No stimulus images found in stimuli_preparation folder")
+    
+    st.markdown("---")
+    
+    # MTF experiment configuration
     st.subheader("Experiment Configuration")
     col1, col2 = st.columns(2)
     with col1:
@@ -404,24 +466,28 @@ def welcome_screen():
     
     # Start experiment button
     if st.button("Start MTF Experiment", type="primary"):
-        if participant_id.strip():
+        # Validation
+        if not participant_id.strip():
+            st.error("Please enter a valid Participant ID")
+        elif 'selected_stimulus_image' not in st.session_state:
+            st.error("Please select a stimulus image")
+        else:
             st.session_state.participant_id = participant_id.strip()
             st.session_state.experiment_type = "MTF Clarity Testing"
             
-            # Initialize MTF experiment manager
+            # Initialize MTF experiment manager with selected image
             st.session_state.mtf_experiment_manager = MTFExperimentManager(
                 max_trials=max_trials,
                 min_trials=min_trials,
                 convergence_threshold=convergence_threshold,
-                participant_id=st.session_state.participant_id
+                participant_id=st.session_state.participant_id,
+                base_image_path=st.session_state.selected_stimulus_image
             )
             st.session_state.stimulus_duration = stimulus_duration
             st.session_state.show_trial_feedback = show_trial_feedback
             
             st.session_state.experiment_stage = 'instructions'
             st.rerun()
-        else:
-            st.error("Please enter a valid Participant ID")
     
     st.markdown("---")
     
@@ -496,14 +562,36 @@ def instructions_screen():
     st.title("📋 MTF Clarity Testing Instructions")
     st.markdown("---")
     
-    st.header("Task Description")
-    st.write("""
-    In this experiment, you will view images with different levels of clarity and judge their sharpness:
-    
-    1. **Look at each image carefully**
-    2. **Judge whether the image appears clear or blurry**
-    3. **Respond based on your immediate perception**
-    """)
+    # Show selected stimulus image
+    if 'selected_stimulus_image' in st.session_state:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            st.subheader("Your Stimulus:")
+            try:
+                from PIL import Image
+                img = Image.open(st.session_state.selected_stimulus_image)
+                img.thumbnail((150, 150))
+                st.image(img, caption=os.path.basename(st.session_state.selected_stimulus_image).replace('.png', ''))
+            except:
+                st.text("Preview not available")
+        with col2:
+            st.subheader("Task Description")
+            st.write("""
+            In this experiment, you will view images with different levels of clarity and judge their sharpness:
+            
+            1. **Look at each image carefully**
+            2. **Judge whether the image appears clear or blurry**
+            3. **Respond based on your immediate perception**
+            """)
+    else:
+        st.header("Task Description")
+        st.write("""
+        In this experiment, you will view images with different levels of clarity and judge their sharpness:
+        
+        1. **Look at each image carefully**
+        2. **Judge whether the image appears clear or blurry**
+        3. **Respond based on your immediate perception**
+        """)
     
     st.header("How to Respond")
     st.write("""
@@ -976,7 +1064,7 @@ def mtf_trial_screen():
                     blurred = cv2.GaussianBlur(pattern, (0, 0), sigmaX=sigma, sigmaY=sigma)
                 else:
                     blurred = pattern
-                st.image(blurred, caption=f"Test Pattern (MTF: {mtf_value:.1f}%)", use_column_width=True)
+                st.image(blurred, caption=f"Test Pattern (MTF: {mtf_value:.1f}%)", use_container_width=True)
                 
                 # Provide fallback image info for button positioning
                 img_info = {
@@ -1521,7 +1609,7 @@ def ado_benchmark_screen():
             value=5,
             help="Smaller steps = more candidate MTF values = longer computation"
         )
-        design_range = st.slider("MTF range", 10, 90, (10, 90), step=5)
+        design_range = st.slider("MTF range", 10, 99, (10, 99), step=5)
         
     with col2:
         st.subheader("Parameter Grid")
@@ -1561,7 +1649,7 @@ def ado_benchmark_screen():
             start_init = time.time()
             ado_engine = ADOEngine(
                 design_space=design_space,
-                threshold_range=(5, 95),
+                threshold_range=(5, 99),
                 slope_range=(0.05, 5.0),
                 threshold_points=threshold_points,
                 slope_points=slope_points
@@ -1698,6 +1786,13 @@ def show_data_storage_info():
             st.sidebar.success("Data is being saved to PostgreSQL database!")
             st.sidebar.write(f"**Current Experiment ID:** {experiment_id}")
             st.sidebar.write(f"**Trials Saved:** {saved_trials}")
+            
+            # Show selected stimulus image
+            if 'selected_stimulus_image' in st.session_state:
+                st.sidebar.markdown("---")
+                st.sidebar.markdown("**🖼️ Current Stimulus:**")
+                stimulus_name = os.path.basename(st.session_state.selected_stimulus_image).replace('.png', '')
+                st.sidebar.success(f"{stimulus_name}")
             
             # Show download button for current experiment
             if st.sidebar.button("📥 Download Current Experiment"):

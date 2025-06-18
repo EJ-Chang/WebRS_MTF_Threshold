@@ -48,27 +48,48 @@ except ImportError as e:
         return cv2.GaussianBlur(image, (0, 0), sigmaX=sigma, sigmaY=sigma)
     
     def load_and_prepare_image(path, use_right_half=True):
-        """Fallback image loading"""
+        """Fallback image loading with text image support"""
         import cv2
+        import os
         img = cv2.imread(path)
         if img is not None:
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             if use_right_half:
-                width = img_rgb.shape[1]
-                mid_point = width // 2
-                img_rgb = img_rgb[:, mid_point:]
+                # Check if this is a text image
+                image_name = os.path.basename(path).lower()
+                
+                if 'text' in image_name:
+                    # Text image: take center portion, crop left and right sides
+                    height, width = img_rgb.shape[:2]
+                    target_width = width // 2  # Target width is half of original
+                    
+                    # Calculate center region boundaries
+                    center_x = width // 2
+                    start_x = center_x - target_width // 2
+                    end_x = start_x + target_width
+                    
+                    # Ensure we don't go out of bounds
+                    start_x = max(0, start_x)
+                    end_x = min(width, end_x)
+                    
+                    img_rgb = img_rgb[:, start_x:end_x]
+                else:
+                    # Regular image: take right half
+                    width = img_rgb.shape[1]
+                    mid_point = width // 2
+                    img_rgb = img_rgb[:, mid_point:]
             return img_rgb
         return None
     
     # Improved ADO fallback with mutual information optimization
     class ADOEngine:
         def __init__(self, **kwargs):
-            self.design_space = kwargs.get('design_space', np.arange(10, 90, 2))  # Finer granularity
+            self.design_space = kwargs.get('design_space', np.arange(10, 100, 2))  # Finer granularity
             self.trial_history = []
             self.response_history = []
             
             # Bayesian parameter grid
-            self.threshold_range = kwargs.get('threshold_range', (5, 95))
+            self.threshold_range = kwargs.get('threshold_range', (5, 99))
             self.slope_range = kwargs.get('slope_range', (0.1, 3.0))
             self.threshold_points = kwargs.get('threshold_points', 31)
             self.slope_points = kwargs.get('slope_points', 15)
@@ -126,7 +147,7 @@ except ImportError as e:
             if last_response == 1:  # Clear response, make it harder
                 return max(10.0, last_mtf - step_size)
             else:  # Not clear, make it easier
-                return min(90.0, last_mtf + step_size)
+                return min(99.0, last_mtf + step_size)
         
         def _calculate_expected_info_gain(self, design):
             """Calculate expected information gain for a given design"""
@@ -405,7 +426,7 @@ class StimulusCache:
         # 預測可能的下一個MTF值範圍
         likely_range = [
             max(10.0, threshold_mean - 2 * threshold_sd),
-            min(90.0, threshold_mean + 2 * threshold_sd)
+            min(99.0, threshold_mean + 2 * threshold_sd)
         ]
         
         # 在該範圍內生成幾個可能的MTF值
@@ -534,8 +555,8 @@ class MTFExperimentManager:
         """Initialize the ADO engine for MTF testing"""
         try:
             self.ado_engine = ADOEngine(
-                design_space=np.arange(10, 90, 1),  # MTF values from 10% to 89%
-                threshold_range=(5, 95),
+                design_space=np.arange(10, 100, 1),  # MTF values from 10% to 99%
+                threshold_range=(5, 99),
                 slope_range=(0.05, 5.0),
                 threshold_points=31,
                 slope_points=21

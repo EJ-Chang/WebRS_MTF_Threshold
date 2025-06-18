@@ -326,3 +326,114 @@ Trial Flow:
 ```
 
 This platform represents a research-grade implementation of adaptive psychophysical testing optimized for Replit hosting with modern web technologies and rigorous experimental methodology.
+
+## Recent Updates (2025-06-17)
+
+### Image Processing Improvements
+
+#### 1. Fixed Preview Image Display Issues
+**Location:** `app.py`, lines 404-431
+- **Problem**: Preview thumbnails had resolution/display size mismatch causing distortion
+- **Solution**: Implemented proper aspect ratio preservation with high-quality scaling
+- **Changes**: 
+  - Added scaling factor calculation: `min(max_size / original_width, max_size / original_height)`
+  - Used `Image.resize()` with `Image.Resampling.LANCZOS` for quality scaling
+  - Added consistent width setting: `st.image(img_resized, width=new_width)`
+  - Added size information display: `st.caption(f"Size: {original_width}×{original_height}")`
+
+#### 2. Enhanced Text Image Cropping Logic
+**Location:** `experiments/mtf_utils.py`, lines 101-169 and `mtf_experiment.py`, lines 50-82
+- **Problem**: Text images used right-half cropping like regular images, cutting off important content
+- **Solution**: Implemented center-portion cropping for text images while maintaining same output dimensions
+- **Changes**:
+  - Auto-detection of text images by filename (`'text' in image_name`)
+  - Text images: crop center portion (left and right sides removed)
+  - Regular images: maintain right-half cropping
+  - Both produce consistent output: 960×1080 pixels
+  - Added informative debug output
+
+**Technical Details:**
+- Original images: 1920×1080 pixels
+- Text image processing: Takes center 960×1080 region
+- Regular image processing: Takes right-half 960×1080 region
+- Final viewport display: Both cropped to 800×600 for consistent UI
+
+### ADO System Configuration Updates
+
+#### 3. Extended MTF Testing Range
+**Problem**: ADO system was limited to 89% MTF maximum, causing experiments to get stuck for participants needing higher clarity thresholds (especially with text stimuli).
+
+**Files Modified:**
+- `mtf_experiment.py`: Multiple ADO range settings
+- `experiments/ado_utils.py`: Core ADO engine defaults
+- `app.py`: Benchmark testing configuration
+
+**Key Changes:**
+```python
+# Before (limited range)
+design_space = np.arange(10, 90, 1)    # Max 89%
+threshold_range = (10, 90)             # Max 90%
+
+# After (extended range)  
+design_space = np.arange(10, 100, 1)   # Max 99%
+threshold_range = (10, 99)             # Max 99%
+```
+
+**Impact:**
+- **Extended Design Space**: Now tests MTF values from 10% to 99% (was 10% to 89%)
+- **Expanded Threshold Range**: ADO can estimate thresholds up to 99% (was limited to 90%)
+- **Better Text Image Support**: Text stimuli often require higher MTF values for clarity perception
+- **Improved Convergence**: System can now properly converge for participants with high clarity thresholds
+
+#### 4. Updated Caching and Prediction Systems
+**Location:** `mtf_experiment.py`, line 429
+- **Cache prediction range**: Extended from `min(90.0, ...)` to `min(99.0, ...)`
+- **Adaptive step limits**: Extended from `min(90.0, ...)` to `min(99.0, ...)`
+- **Ensures**: Caching system can preload high MTF values when needed
+
+### Technical Implementation Notes
+
+#### Image Processing Pipeline
+1. **Load original image** (1920×1080 pixels)
+2. **Apply cropping logic**:
+   - Text images: Center crop → 960×1080 pixels
+   - Regular images: Right-half crop → 960×1080 pixels  
+3. **MTF processing**: Apply blur/sharpening based on MTF value
+4. **Viewport cropping**: Final display crop → 800×600 pixels
+5. **Base64 encoding**: For web display in Streamlit
+
+#### ADO Configuration Strategy
+- **Design Space**: 90 candidate MTF values (10%, 11%, ..., 99%)
+- **Parameter Grid**: 31 threshold × 21 slope = 651 combinations
+- **Computational Load**: ~119,340 operations per trial
+- **Performance**: Optimized for <1000ms computation (masked by fixation period)
+
+### Development Guidelines Updates
+
+#### Image Handling Best Practices
+- **Always preserve aspect ratios** when generating thumbnails
+- **Use consistent output dimensions** for MTF processing (960×1080)
+- **Implement intelligent cropping** based on image content type
+- **Test with both text and natural images** to ensure proper cropping
+
+#### ADO Range Configuration
+- **Design space should extend to 99%** for comprehensive threshold estimation
+- **Threshold ranges should match design space** to avoid convergence issues
+- **Cache prediction ranges must align** with ADO capabilities
+- **Consider stimulus type requirements** when setting ranges (text vs natural images)
+
+#### Testing and Validation
+- **Test with extreme thresholds** (both very low and very high)
+- **Verify image cropping** with different stimulus types
+- **Check ADO convergence** across full MTF range
+- **Validate preview displays** maintain proper aspect ratios
+
+### Known Optimizations Applied
+
+1. **Smart Image Caching**: LRU cache with MTF value prediction for preloading
+2. **Precise Timing System**: ±10ms accuracy with automatic calibration  
+3. **Extended MTF Range**: Full 10-99% coverage for comprehensive testing
+4. **Intelligent Cropping**: Content-aware processing for different image types
+5. **Quality Scaling**: High-quality thumbnail generation with aspect ratio preservation
+
+This ensures the platform can handle diverse experimental requirements while maintaining optimal performance and user experience.

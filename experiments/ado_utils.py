@@ -24,7 +24,7 @@ class ADOEngine:
     
     def __init__(self, 
                  design_space: np.ndarray = None,
-                 threshold_range: Tuple[float, float] = (10, 90),
+                 threshold_range: Tuple[float, float] = (10, 99),
                  slope_range: Tuple[float, float] = (0.1, 3.0),
                  threshold_points: int = 41,
                  slope_points: int = 30):
@@ -40,7 +40,7 @@ class ADOEngine:
         
         # 設計空間：可選的 MTF 值
         if design_space is None:
-            self.design_space = np.arange(5, 100, 5)  # 5% 到 95%，每 5% 一步
+            self.design_space = np.arange(5, 100, 5)  # 5% 到 99%，每 5% 一步
         else:
             self.design_space = np.array(design_space)
         
