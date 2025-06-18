@@ -778,29 +778,30 @@ def save_experiment_data(trial_result, is_practice=False):
         # Get participant ID from session
         participant_id = st.session_state.get('participant_id')
         if not participant_id:
-            # Create new experiment if not exists
-            participant_id = st.session_state.get('participant_id', 'unknown')
+            participant_id = 'unknown'
+        
+        # Create participant record if not exists
+        if not hasattr(st.session_state, 'participant_created'):
             experiment_type = st.session_state.get('experiment_type', 'unknown')
             
             # Get experiment parameters
             exp_manager = st.session_state.get('experiment_manager')
             if exp_manager:
-                experiment_id = db.create_experiment(
-                    participant_id=participant_id,
-                    experiment_type=experiment_type,
-                    use_ado=exp_manager.use_ado,
-                    num_trials=exp_manager.num_trials,
-                    num_practice_trials=exp_manager.num_practice_trials,
-                    stimulus_duration=exp_manager.stimulus_duration,
-                    inter_trial_interval=exp_manager.inter_trial_interval
-                )
+                experiment_config = {
+                    'experiment_type': experiment_type,
+                    'use_ado': exp_manager.use_ado,
+                    'num_trials': exp_manager.num_trials,
+                    'num_practice_trials': exp_manager.num_practice_trials,
+                    'stimulus_duration': exp_manager.stimulus_duration,
+                    'inter_trial_interval': exp_manager.inter_trial_interval
+                }
             else:
-                experiment_id = db.create_experiment(
-                    participant_id=participant_id,
-                    experiment_type=experiment_type
-                )
+                experiment_config = {
+                    'experiment_type': experiment_type
+                }
             
-            st.session_state.current_experiment_id = experiment_id
+            csv_manager.create_participant_record(participant_id, experiment_config)
+            st.session_state.participant_created = True
         
         # Calculate derived fields
         if 'left_stimulus' in trial_result and 'right_stimulus' in trial_result:
@@ -809,8 +810,8 @@ def save_experiment_data(trial_result, is_practice=False):
                 expected = 'left' if trial_result['left_stimulus'] > trial_result['right_stimulus'] else 'right'
                 trial_result['is_correct'] = trial_result['response'] == expected
         
-        # Save trial to database - ensure experiment_id is int
-        db.save_trial(int(experiment_id), trial_result)
+        # Save trial to CSV
+        csv_manager.save_trial_data(participant_id, trial_result)
         
         # Update session state for tracking
         if 'saved_trials' not in st.session_state:
@@ -818,7 +819,7 @@ def save_experiment_data(trial_result, is_practice=False):
         st.session_state.saved_trials += 1
         
     except Exception as e:
-        st.error(f"Error saving data to database: {str(e)}")
+        st.error(f"Error saving data to CSV: {str(e)}")
 
 def record_response(response, trial_data, is_practice=False):
     """Record participant response and reaction time"""
@@ -1831,13 +1832,13 @@ def show_data_storage_info():
         
         csv_manager = st.session_state.csv_manager
         
-        # Show current experiment info
-        if 'current_experiment_id' in st.session_state:
-            experiment_id = st.session_state.current_experiment_id
+        # Show current participant info
+        if 'participant_id' in st.session_state:
+            participant_id = st.session_state.participant_id
             saved_trials = st.session_state.get('saved_trials', 0)
             
-            st.sidebar.success("Data is being saved to PostgreSQL database!")
-            st.sidebar.write(f"**Current Experiment ID:** {experiment_id}")
+            st.sidebar.success("Data is being saved to CSV files!")
+            st.sidebar.write(f"**Current Participant:** {participant_id}")
             st.sidebar.write(f"**Trials Saved:** {saved_trials}")
             
             # Show selected stimulus image
@@ -1847,14 +1848,14 @@ def show_data_storage_info():
                 stimulus_name = os.path.basename(st.session_state.selected_stimulus_image).replace('.png', '')
                 st.sidebar.success(f"{stimulus_name}")
             
-            # Show download button for current experiment
-            if st.sidebar.button("📥 Download Current Experiment"):
+            # Show download button for current participant data
+            if st.sidebar.button("📥 Download Current Data"):
                 try:
-                    csv_data = db.export_to_csv(experiment_id)
+                    participant_id = st.session_state.get('participant_id', 'unknown')
+                    csv_data = csv_manager.export_to_csv_string(participant_id)
                     if csv_data:
-                        participant_id = st.session_state.get('participant_id', 'unknown')
                         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                        filename = f"experiment_{experiment_id}_{participant_id}_{timestamp}.csv"
+                        filename = f"data_{participant_id}_{timestamp}.csv"
                         
                         st.sidebar.download_button(
                             label="Download CSV",
@@ -1863,7 +1864,7 @@ def show_data_storage_info():
                             mime='text/csv'
                         )
                     else:
-                        st.sidebar.error("No data found for current experiment")
+                        st.sidebar.error("No data found for current participant")
                 except Exception as e:
                     st.sidebar.error(f"Error exporting data: {str(e)}")
         
@@ -1871,20 +1872,19 @@ def show_data_storage_info():
         participant_id = st.session_state.get('participant_id')
         if participant_id:
             try:
-                experiments = db.get_participant_experiments(participant_id)
-                if experiments:
-                    st.sidebar.write("**Previous Experiments:**")
-                    for exp in experiments[-3:]:  # Show last 3 experiments
-                        status = "✅ Complete" if exp['completed_at'] else "🔄 In Progress"
-                        st.sidebar.write(f"• ID {exp['id']}: {exp['experiment_type']} {status}")
+                summary = csv_manager.get_experiment_summary(participant_id)
+                if summary:
+                    status = "✅ Complete" if summary.get('status') == 'completed' else "🔄 In Progress"
+                    experiment_type = summary.get('experiment_config', {}).get('experiment_type', 'Unknown')
+                    st.sidebar.write(f"**Current Experiment:** {experiment_type} {status}")
             except Exception as e:
-                st.sidebar.write("Database connection established")
+                st.sidebar.write("CSV storage ready")
         else:
-            st.sidebar.info("Enter participant ID to see database storage")
+            st.sidebar.info("Enter participant ID to see data storage")
             
     except Exception as e:
-        st.sidebar.error(f"Database connection error: {str(e)}")
-        st.sidebar.info("PostgreSQL database is available but connection failed")
+        st.sidebar.error(f"CSV storage error: {str(e)}")
+        st.sidebar.info("CSV data storage is available")
 
 def main():
     """Main application logic"""
