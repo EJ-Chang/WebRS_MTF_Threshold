@@ -1,8 +1,12 @@
-modules = ["python-3.11"]
+modules = ["python-3.13"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["cairo", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "gtk3", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "mesa", "openjpeg", "pkg-config", "qhull", "tcl", "tk", "xorg.libX11", "xorg.libXext", "xsimd", "zlib"]
+packages = ["cairo", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "gtk3", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "mesa", "openjpeg", "pkg-config", "qhull", "tcl", "tk", "xorg.libX11", "xorg.libXext", "xsimd", "zlib", "gcc", "stdenv.cc.cc.lib", "glibc"]
+
+[env]
+LD_LIBRARY_PATH = "${NIX_LD_LIBRARY_PATH}"
+PYTHONPATH = "${REPL_HOME}/.pythonlibs/lib/python3.13/site-packages"
 
 [deployment]
 deploymentTarget = "autoscale"
