@@ -37,6 +37,8 @@ packages = [
 [env]
 LD_LIBRARY_PATH = "${NIX_LD_LIBRARY_PATH}"
 PYTHONPATH = "${REPL_HOME}/.pythonlibs/lib/python3.13/site-packages"
+PYTHONDONTWRITEBYTECODE = "1"
+NUMPY_EXPERIMENTAL_ARRAY_FUNCTION = "0"
 
 [deployment]
 deploymentTarget = "autoscale"

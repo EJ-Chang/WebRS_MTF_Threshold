@@ -50,6 +50,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+psychophysics_env/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -141,7 +142,7 @@ stimuli_cache/
 .config/
 
 # Package manager
-uv.lock
+# uv.lock  # Keep uv.lock for Replit deployment
 poetry.lock
 Pipfile.lock
 
