@@ -1,12 +1,46 @@
 modules = ["python-3.11"]
-
 [nix]
 channel = "stable-24_05"
-packages = ["cairo", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "gtk3", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "mesa", "openjpeg", "pkg-config", "qhull", "tcl", "tk", "xorg.libX11", "xorg.libXext", "xsimd", "zlib", "gcc", "glibc", "libstdcxx5"]
+packages = [
+    "cairo",
+    "ffmpeg-full",
+    "freetype",
+    "ghostscript",
+    "glibcLocales",
+    "gobject-introspection",
+    "gtk3",
+    "lcms2",
+    "libGL",
+    "libGLU",
+    "libimagequant",
+    "libjpeg",
+    "libtiff",
+    "libwebp",
+    "libxcrypt",
+    "mesa",
+    "openjpeg",
+    "pkg-config",
+    "qhull",
+    "tcl",
+    "tk",
+    "xorg.libX11",
+    "xorg.libXext",
+    "xsimd",
+    "zlib",                  # 已經有了
+    "zlib-ng",               # 添加這個
+    "blas",                  # 添加數學庫
+    "lapack",                # 添加線性代數庫
+    "gfortran",              # 添加Fortran編譯器
+]
 
 [deployment]
 deploymentTarget = "autoscale"
 run = ["streamlit", "run", "app.py", "--server.port", "5000"]
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "streamlit run app.py --server.port 5000"
+waitForPort = 5000
 
 [workflows]
 runButton = "Project"
