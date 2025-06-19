@@ -19,11 +19,11 @@ This is a sophisticated web-based psychophysics experiment platform built with S
 - **Data Processing**: Real-time adaptive stimulus selection using simplified ADO algorithms
 - **Session Management**: Streamlit's built-in session state for experiment continuity
 
-### Data Storage Design
-- **Primary**: CSV files for response data storage (experiment_data/ directory)
-- **Format**: One CSV file per participant with all trial data
-- **Metadata**: JSON summary files for experiment configuration and status
-- **Schema**: Flat structure with participant_id, trial data, and timestamps
+### Database Design
+- **Primary**: PostgreSQL for production (Replit environment)
+- **Fallback**: SQLite for development and testing
+- **ORM**: SQLAlchemy with declarative models
+- **Schema**: Participant -> Experiment -> Trial hierarchical structure
 
 ## Key Components
 
@@ -33,9 +33,9 @@ This is a sophisticated web-based psychophysics experiment platform built with S
 3. **ADO Integration**: Adaptive stimulus selection for efficient parameter estimation
 
 ### Data Management
-- **CSVDataManager**: File-based data operations with automatic directory creation
-- **DataManager**: Data validation, analysis utilities, and psychometric function calculation
-- **Real-time Storage**: Direct CSV file writing with session-based tracking
+- **DatabaseManager**: SQLAlchemy-based database operations with automatic fallbacks
+- **DataManager**: CSV export, data validation, and analysis utilities
+- **Real-time Storage**: Session-based temporary storage with persistent database backup
 
 ### Image Processing Pipeline
 - **MTF Simulation**: Gaussian blur-based MTF degradation simulation
@@ -97,8 +97,6 @@ This is a sophisticated web-based psychophysics experiment platform built with S
 ```
 Changelog:
 - June 17, 2025. Initial setup
-- June 19, 2025. Migrated from database storage to CSV file storage for response data
-- June 19, 2025. Fixed virtual environment conflicts and dependency issues
 ```
 
 ## User Preferences
