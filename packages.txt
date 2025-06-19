@@ -1,0 +1,9 @@
+# System packages for Streamlit Community Cloud
+# This file ensures OpenGL libraries are available if needed
+
+libgl1-mesa-glx
+libglib2.0-0
+libsm6
+libxext6
+libxrender-dev
+libgomp1
