@@ -53,9 +53,31 @@ def check_dependencies():
     else:
         print("✅ All dependencies satisfied")
 
+def detect_environment():
+    """Detect the current hosting environment"""
+    # Streamlit Community Cloud environment variables
+    if (os.environ.get('STREAMLIT_SHARING') or 
+        os.environ.get('STREAMLIT_CLOUD') or
+        os.path.exists('/mount/src')):  # Streamlit Cloud mount path
+        return 'streamlit_cloud'
+    # Replit environment variables
+    elif os.environ.get('REPLIT_DB_URL') or os.environ.get('REPL_SLUG'):
+        return 'replit'
+    else:
+        return 'local'
+
 def main():
-    """Main entry point for Replit"""
-    print("🧠 MTF Psychophysics Experiment Platform")
+    """Main entry point for Replit - only runs on Replit"""
+    env = detect_environment()
+    
+    if env == 'streamlit_cloud':
+        print("🌐 Detected Streamlit Community Cloud environment")
+        print("💡 Streamlit Cloud handles app startup automatically")
+        print("💡 This script is designed for Replit hosting only")
+        print("💡 Your app should start normally without this script")
+        return
+    
+    print("🧠 MTF Psychophysics Experiment Platform (Replit)")
     print("=" * 50)
     
     # Setup Replit environment

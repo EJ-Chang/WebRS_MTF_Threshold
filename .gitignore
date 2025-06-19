@@ -103,9 +103,6 @@ $RECYCLE.BIN/
 # Linux
 *~
 
-# Streamlit
-.streamlit/
-
 # Database files
 *.db
 *.sqlite
