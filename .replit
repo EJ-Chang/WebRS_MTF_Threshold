@@ -1,4 +1,7 @@
-modules = ["python-3.13", "python-base-3.13"]
+modules = ["python-3.13"]
+
+[nix.override]
+python = "python313"
 
 [nix]
 channel = "stable-24_05"
