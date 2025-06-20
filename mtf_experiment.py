@@ -14,32 +14,50 @@ from io import BytesIO
 from PIL import Image
 import cv2
 
-# Import the ADO and MTF utilities with fallback handling
+# Import the ADO and MTF utilities with proper fallback handling
+# Force use of real ADO engine from ado_utils.py
 try:
     from experiments.ado_utils import ADOEngine
+    print("✅ Successfully imported real ADOEngine from experiments.ado_utils")
+    ADO_ENGINE_AVAILABLE = True
+except ImportError as e:
+    print(f"Primary ADO import failed: {e}")
+    
+    # Try alternative path for different environments
+    try:
+        import sys
+        import os
+        # Add current directory to path for Replit/alternative environments
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'experiments'))
+        
+        from ado_utils import ADOEngine
+        print("✅ Successfully imported real ADOEngine from alternative path")
+        ADO_ENGINE_AVAILABLE = True
+    except ImportError as e2:
+        print(f"❌ Alternative ADO import also failed: {e2}")
+        print("❌ CRITICAL: Real ADO engine not available - experiment will not use true ADO!")
+        ADO_ENGINE_AVAILABLE = False
+
+# Import MTF utilities
+try:
     from experiments.mtf_utils import apply_mtf_to_image, load_and_prepare_image
     MTF_UTILS_AVAILABLE = True
 except ImportError as e:
     print(f"MTF utilities not available: {e}")
     MTF_UTILS_AVAILABLE = False
     
-    # Fallback imports for Replit environment
+    # Try alternative path
     try:
-        import sys
-        import os
-        # Add current directory to path for Replit
-        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'experiments'))
-        
-        from ado_utils import ADOEngine
         from mtf_utils import apply_mtf_to_image, load_and_prepare_image
         MTF_UTILS_AVAILABLE = True
         print("✅ Loaded MTF utilities from alternative path")
     except ImportError as e2:
-        print(f"Alternative import also failed: {e2}")
+        print(f"Alternative MTF import also failed: {e2}")
         MTF_UTILS_AVAILABLE = False
     
-    # Fallback implementations for web interface
+# Only provide fallback implementations for MTF utilities if needed
+if not MTF_UTILS_AVAILABLE:
     def apply_mtf_to_image(image, mtf_percent):
         """Fallback MTF implementation using simple Gaussian blur"""
         import cv2
@@ -80,207 +98,67 @@ except ImportError as e:
                     img_rgb = img_rgb[:, start_x:end_x]
             return img_rgb
         return None
+
+# Only create fallback ADO if real ADO is not available
+# THIS SHOULD NOT HAPPEN - we want to force use of real ADO only
+if not ADO_ENGINE_AVAILABLE:
+    print("🚨 WARNING: Using fallback ADO instead of real ADO - this defeats the purpose!")
+    print("🚨 Please ensure experiments/ado_utils.py is available and working correctly!")
     
-    # Improved ADO fallback with mutual information optimization
     class ADOEngine:
+        """FALLBACK ADO - NOT REAL ADO! This should not be used if real ADO is available."""
         def __init__(self, **kwargs):
-            self.design_space = kwargs.get('design_space', np.arange(10, 100, 2))  # Finer granularity
+            print("🚨 FALLBACK ADO ENGINE INITIALIZED - NOT USING REAL ADO!")
+            self.design_space = kwargs.get('design_space', np.arange(10, 100, 5))
             self.trial_history = []
             self.response_history = []
             
-            # Bayesian parameter grid
-            self.threshold_range = kwargs.get('threshold_range', (5, 99))
-            self.slope_range = kwargs.get('slope_range', (0.1, 3.0))
-            self.threshold_points = kwargs.get('threshold_points', 31)
-            self.slope_points = kwargs.get('slope_points', 15)
-            
-            # Initialize parameter grids
-            self.thresholds = np.linspace(self.threshold_range[0], self.threshold_range[1], self.threshold_points)
-            self.slopes = np.linspace(self.slope_range[0], self.slope_range[1], self.slope_points)
-            
-            # Initialize uniform prior
-            self.posterior = np.ones((self.threshold_points, self.slope_points))
-            self.posterior /= self.posterior.sum()
-            
-        def psychometric_function(self, mtf, threshold, slope):
-            """Psychometric function: P(clear) = 1 / (1 + exp(-slope * (mtf - threshold)))"""
-            # Logistic function
-            return 1.0 / (1.0 + np.exp(-slope * (mtf - threshold)))
-        
         def get_optimal_design(self):
-            """Find optimal MTF value using mutual information maximization"""
+            """Simple fallback design selection - NOT REAL ADO"""
             if len(self.trial_history) == 0:
-                # Start with a good initial value
                 return 60.0
             
-            if len(self.trial_history) < 3:
-                # Use simple adaptive strategy for first few trials
-                return self._simple_adaptive_design()
-            
-            # Mutual information optimization
-            best_design = None
-            max_expected_info_gain = -np.inf
-            
-            for design in self.design_space:
-                expected_info_gain = self._calculate_expected_info_gain(design)
-                
-                if expected_info_gain > max_expected_info_gain:
-                    max_expected_info_gain = expected_info_gain
-                    best_design = design
-            
-            return float(best_design) if best_design is not None else self._simple_adaptive_design()
-        
-        def _simple_adaptive_design(self):
-            """Simple adaptive strategy for initial trials"""
+            # Very simple step-up/step-down strategy
             last_response = self.response_history[-1] if self.response_history else 1
             last_mtf = self.trial_history[-1] if self.trial_history else 60.0
             
-            # Adaptive step size based on uncertainty
-            current_uncertainty = self._get_current_uncertainty()
-            if current_uncertainty > 15:
-                step_size = 15.0
-            elif current_uncertainty > 8:
-                step_size = 8.0
-            else:
-                step_size = 4.0
-            
             if last_response == 1:  # Clear response, make it harder
-                return max(10.0, last_mtf - step_size)
+                return max(10.0, last_mtf - 10.0)
             else:  # Not clear, make it easier
-                return min(99.0, last_mtf + step_size)
-        
-        def _calculate_expected_info_gain(self, design):
-            """Calculate expected information gain for a given design"""
-            current_entropy = self._calculate_entropy(self.posterior)
-            expected_entropy = 0.0
-            
-            # Calculate for both possible responses (clear=1, not_clear=0)
-            for response in [0, 1]:
-                # Calculate posterior after hypothetical response
-                posterior_after = self._simulate_posterior_update(design, response)
-                
-                # Calculate probability of this response
-                p_response = self._predict_response_probability(design, response)
-                
-                # Calculate entropy after this response
-                entropy_after = self._calculate_entropy(posterior_after)
-                
-                # Add to expected entropy
-                expected_entropy += p_response * entropy_after
-            
-            # Information gain = current entropy - expected entropy
-            return current_entropy - expected_entropy
-        
-        def _predict_response_probability(self, design, response):
-            """Predict probability of a response given current posterior"""
-            total_prob = 0.0
-            
-            for i, threshold in enumerate(self.thresholds):
-                for j, slope in enumerate(self.slopes):
-                    # Probability of parameters
-                    p_params = self.posterior[i, j]
-                    
-                    # Probability of response given parameters
-                    p_clear = self.psychometric_function(design, threshold, slope)
-                    p_response_given_params = p_clear if response == 1 else (1 - p_clear)
-                    
-                    total_prob += p_params * p_response_given_params
-            
-            return total_prob
-        
-        def _simulate_posterior_update(self, design, response):
-            """Simulate posterior update after a hypothetical response"""
-            new_posterior = np.zeros_like(self.posterior)
-            
-            for i, threshold in enumerate(self.thresholds):
-                for j, slope in enumerate(self.slopes):
-                    # Prior
-                    prior = self.posterior[i, j]
-                    
-                    # Likelihood
-                    p_clear = self.psychometric_function(design, threshold, slope)
-                    likelihood = p_clear if response == 1 else (1 - p_clear)
-                    
-                    # Posterior ∝ prior × likelihood
-                    new_posterior[i, j] = prior * likelihood
-            
-            # Normalize
-            total = new_posterior.sum()
-            if total > 0:
-                new_posterior /= total
-            else:
-                # If all probabilities are zero, keep uniform
-                new_posterior = np.ones_like(new_posterior) / new_posterior.size
-            
-            return new_posterior
-        
-        def _calculate_entropy(self, posterior):
-            """Calculate entropy of posterior distribution"""
-            # Avoid log(0) by adding small epsilon
-            epsilon = 1e-10
-            posterior_safe = posterior + epsilon
-            return -np.sum(posterior_safe * np.log(posterior_safe))
+                return min(99.0, last_mtf + 10.0)
         
         def update_posterior(self, mtf, response):
-            """Update posterior distribution with new data"""
+            """Record response - NO REAL BAYESIAN UPDATE"""
             self.trial_history.append(mtf)
             self.response_history.append(response)
-            
-            # Bayesian update
-            new_posterior = np.zeros_like(self.posterior)
-            
-            for i, threshold in enumerate(self.thresholds):
-                for j, slope in enumerate(self.slopes):
-                    # Prior
-                    prior = self.posterior[i, j]
-                    
-                    # Likelihood
-                    p_clear = self.psychometric_function(mtf, threshold, slope)
-                    likelihood = p_clear if response == 1 else (1 - p_clear)
-                    
-                    # Posterior ∝ prior × likelihood
-                    new_posterior[i, j] = prior * likelihood
-            
-            # Normalize
-            total = new_posterior.sum()
-            if total > 0:
-                self.posterior = new_posterior / total
-            else:
-                # If all probabilities are zero, keep previous posterior
-                print("Warning: Likelihood underflow, keeping previous posterior")
         
         def get_parameter_estimates(self):
-            """Get current parameter estimates from posterior"""
-            # Calculate marginal distributions
-            threshold_marginal = np.sum(self.posterior, axis=1)
-            slope_marginal = np.sum(self.posterior, axis=0)
+            """Fake parameter estimates - NOT REAL ADO"""
+            if len(self.trial_history) == 0:
+                return {
+                    'threshold_mean': 50.0,
+                    'threshold_sd': 20.0,
+                    'slope_mean': 1.0,
+                    'slope_sd': 0.5
+                }
             
-            # Calculate means
-            threshold_mean = np.sum(threshold_marginal * self.thresholds)
-            slope_mean = np.sum(slope_marginal * self.slopes)
-            
-            # Calculate standard deviations
-            threshold_var = np.sum(threshold_marginal * (self.thresholds - threshold_mean)**2)
-            slope_var = np.sum(slope_marginal * (self.slopes - slope_mean)**2)
-            
-            threshold_sd = np.sqrt(threshold_var)
-            slope_sd = np.sqrt(slope_var)
+            # Fake decreasing uncertainty over time
+            uncertainty = max(2.0, 20.0 - len(self.trial_history) * 1.5)
+            estimated_threshold = np.mean(self.trial_history) if self.trial_history else 50.0
             
             return {
-                'threshold_mean': threshold_mean,
-                'threshold_sd': threshold_sd,
-                'slope_mean': slope_mean,
-                'slope_sd': slope_sd
+                'threshold_mean': estimated_threshold,
+                'threshold_sd': uncertainty,
+                'slope_mean': 1.0,
+                'slope_sd': 0.5
             }
         
-        def _get_current_uncertainty(self):
-            """Get current threshold uncertainty"""
-            estimates = self.get_parameter_estimates()
-            return estimates['threshold_sd']
-        
         def get_entropy(self):
-            """Get current posterior entropy"""
-            return self._calculate_entropy(self.posterior)
+            """Fake entropy calculation"""
+            estimates = self.get_parameter_estimates()
+            return estimates['threshold_sd'] / 10.0  # Fake entropy
+else:
+    print("✅ Real ADO engine is available and will be used!")
 
 class PreciseTimer:
     """精確時間測量類別，用於校正系統延遲和提供準確的RT測量"""

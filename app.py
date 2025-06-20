@@ -7,7 +7,6 @@ from datetime import datetime
 import json
 import plotly.graph_objects as go
 import plotly.express as px
-from experiment import ExperimentManager
 from data_manager import DataManager
 from mtf_experiment import MTFExperimentManager
 from csv_data_manager import CSVDataManager
