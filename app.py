@@ -51,6 +51,40 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+def initialize_managers():
+    """Initialize data managers once at app startup"""
+    # Initialize CSV manager
+    if 'csv_manager' not in st.session_state:
+        st.session_state.csv_manager = CSVDataManager()
+        print("✅ CSV Manager initialized")
+    
+    # Initialize database manager with error handling
+    if 'db_manager' not in st.session_state:
+        try:
+            st.session_state.db_manager = DatabaseManager()
+            st.session_state.db_manager_initialized = True
+            print("✅ Database Manager initialized successfully")
+        except Exception as e:
+            print(f"⚠️ Database Manager initialization failed: {e}")
+            st.session_state.db_manager = None
+            st.session_state.db_manager_initialized = False
+    
+    # Mark managers as initialized
+    if 'managers_initialized' not in st.session_state:
+        st.session_state.managers_initialized = True
+
+def protect_session_settings():
+    """Ensure critical session settings are preserved"""
+    # Backup and restore show_trial_feedback if it gets lost
+    if 'show_trial_feedback_backup' not in st.session_state:
+        if 'show_trial_feedback' in st.session_state:
+            st.session_state.show_trial_feedback_backup = st.session_state.show_trial_feedback
+    
+    # Restore from backup if main setting is lost
+    if 'show_trial_feedback' not in st.session_state and 'show_trial_feedback_backup' in st.session_state:
+        st.session_state.show_trial_feedback = st.session_state.show_trial_feedback_backup
+        print("🔧 Restored show_trial_feedback from backup")
+
 def crop_image_to_viewport(image_array, target_width=800, target_height=600):
     """
     Crop image to fit viewport while maintaining aspect ratio and centering
@@ -498,6 +532,10 @@ def welcome_screen():
             )
             st.session_state.stimulus_duration = stimulus_duration
             st.session_state.show_trial_feedback = show_trial_feedback
+            
+            # Backup critical settings
+            st.session_state.show_trial_feedback_backup = show_trial_feedback
+            print(f"🔧 Trial feedback setting saved: {show_trial_feedback}")
 
             st.session_state.experiment_stage = 'instructions'
             st.rerun()
@@ -801,16 +839,16 @@ def run_trial(is_practice=False):
 def save_experiment_data(trial_result):
     """Save experiment data to CSV file and database"""
     try:
-        # Initialize CSV manager
-        if 'csv_manager' not in st.session_state:
-            st.session_state.csv_manager = CSVDataManager()
+        # Use pre-initialized managers
+        csv_manager = st.session_state.get('csv_manager')
+        db_manager = st.session_state.get('db_manager')
         
-        # Initialize database manager
-        if 'db_manager' not in st.session_state:
-            st.session_state.db_manager = DatabaseManager()
-
-        csv_manager = st.session_state.csv_manager
-        db_manager = st.session_state.db_manager
+        if not csv_manager:
+            st.error("CSV Manager not initialized")
+            return
+        
+        # Database manager might be None if initialization failed
+        db_initialized = st.session_state.get('db_manager_initialized', False)
 
         # Get participant ID from session
         participant_id = st.session_state.get('participant_id')
@@ -840,22 +878,26 @@ def save_experiment_data(trial_result):
             # Create CSV record
             csv_manager.create_participant_record(participant_id, experiment_config)
             
-            # Create database records
-            try:
-                db_manager.create_participant(participant_id)
-                experiment_id = db_manager.create_experiment(
-                    participant_id=participant_id,
-                    experiment_type=experiment_type,
-                    use_ado=experiment_config.get('use_ado', False),
-                    num_trials=experiment_config.get('num_trials'),
-                    num_practice_trials=experiment_config.get('num_practice_trials'),
-                    stimulus_duration=experiment_config.get('stimulus_duration'),
-                    inter_trial_interval=experiment_config.get('inter_trial_interval')
-                )
-                st.session_state.experiment_id = experiment_id
-                print(f"✅ Database experiment created with ID: {experiment_id}")
-            except Exception as db_error:
-                print(f"⚠️ Database experiment creation failed: {db_error}")
+            # Create database records if available
+            if db_initialized and db_manager:
+                try:
+                    db_manager.create_participant(participant_id)
+                    experiment_id = db_manager.create_experiment(
+                        participant_id=participant_id,
+                        experiment_type=experiment_type,
+                        use_ado=experiment_config.get('use_ado', False),
+                        num_trials=experiment_config.get('num_trials'),
+                        num_practice_trials=experiment_config.get('num_practice_trials'),
+                        stimulus_duration=experiment_config.get('stimulus_duration'),
+                        inter_trial_interval=experiment_config.get('inter_trial_interval')
+                    )
+                    st.session_state.experiment_id = experiment_id
+                    print(f"✅ Database experiment created with ID: {experiment_id}")
+                except Exception as db_error:
+                    print(f"⚠️ Database experiment creation failed: {db_error}")
+                    st.session_state.experiment_id = None
+            else:
+                print("⚠️ Database not available, using CSV only")
                 st.session_state.experiment_id = None
             
             st.session_state.participant_created = True
@@ -871,15 +913,18 @@ def save_experiment_data(trial_result):
         csv_manager.save_trial_data(participant_id, trial_result)
 
         # Save to database (secondary backup)
-        experiment_id = st.session_state.get('experiment_id')
-        if experiment_id:
-            try:
-                db_manager.save_trial(experiment_id, trial_result)
-                print(f"✅ Trial data saved to database (experiment_id: {experiment_id})")
-            except Exception as db_error:
-                print(f"⚠️ Database trial save failed: {db_error}")
+        if db_initialized and db_manager:
+            experiment_id = st.session_state.get('experiment_id')
+            if experiment_id:
+                try:
+                    db_manager.save_trial(experiment_id, trial_result)
+                    print(f"✅ Trial data saved to database (experiment_id: {experiment_id})")
+                except Exception as db_error:
+                    print(f"⚠️ Database trial save failed: {db_error}")
+            else:
+                print("⚠️ No experiment_id available, skipping database save")
         else:
-            print("⚠️ No experiment_id available, skipping database save")
+            print("⚠️ Database not available, saving to CSV only")
 
         # Update session state
         if 'saved_trials' not in st.session_state:
@@ -892,12 +937,16 @@ def save_experiment_data(trial_result):
         st.error(f"❌ 保存數據時出錯: {e}")
         print(f"Error saving trial data: {e}")
 
-        # If database fails, ensure CSV still works
+        # If main process fails, ensure CSV still works as fallback
         try:
-            csv_manager.save_trial_data(participant_id, trial_result)
-            print("✅ Fallback: Data saved to CSV only")
+            if csv_manager:
+                csv_manager.save_trial_data(participant_id, trial_result)
+                print("✅ Fallback: Data saved to CSV only")
+            else:
+                print("❌ Critical: No storage methods available")
         except Exception as csv_error:
-            print(f"❌ Critical: Both storage methods failed - {csv_error}")
+            print(f"❌ Critical: CSV fallback also failed - {csv_error}")
+            st.error("Data storage failed! Please contact the experimenter.")
 
 def record_response(response, trial_data, is_practice=False):
     """Record participant response and reaction time"""
@@ -1291,13 +1340,13 @@ def record_mtf_response_and_advance(trial_data, is_clear):
     save_experiment_data(mtf_trial_result)
 
     # Check if we should show feedback or go directly to next trial
-    show_feedback = st.session_state.get('show_trial_feedback', False)
+    show_feedback = st.session_state.get('show_trial_feedback', True)
     
     # Debug information - check if setting exists
     if 'show_trial_feedback' in st.session_state:
         print(f"🔧 Trial feedback setting: {show_feedback}")
     else:
-        print("⚠️ show_trial_feedback setting not found in session state, defaulting to False")
+        print("⚠️ show_trial_feedback setting not found in session state, defaulting to True (UI default)")
 
     if show_feedback:
         # Store response for feedback
@@ -1928,6 +1977,12 @@ def show_data_storage_info():
 
 def main():
     """Main application logic"""
+    # Initialize data managers at startup
+    initialize_managers()
+    
+    # Protect critical session settings
+    protect_session_settings()
+    
     # Initialize session state for smooth transitions
     if 'experiment_stage' not in st.session_state:
         st.session_state.experiment_stage = 'welcome'
