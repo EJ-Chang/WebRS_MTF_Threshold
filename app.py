@@ -776,8 +776,7 @@ def run_trial(is_practice=False):
     _, col2, _ = st.columns([1, 2, 1])
 
     with col2:
-        ```python
-button_col1, button_col2 = st.columns(2)
+        button_col1, button_col2 = st.columns(2)
 
         with button_col1:
             if st.button("Left is Brighter", key="left_button", use_container_width=True):
