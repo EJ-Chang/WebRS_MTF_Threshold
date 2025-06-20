@@ -327,7 +327,26 @@ Trial Flow:
 
 This platform represents a research-grade implementation of adaptive psychophysical testing optimized for Replit hosting with modern web technologies and rigorous experimental methodology.
 
-## Recent Updates (2025-06-17)
+## Recent Updates (2025-06-20)
+
+### Python Version Upgrade to 3.13
+**Configuration Files Updated:**
+- **`.replit`**: Updated to use `python-3.13` module with `nix.override` for Python 3.13
+- **`pyproject.toml`**: Updated minimum Python requirement to `>=3.13`
+- **Environment Variables**: Added `PYTHONDONTWRITEBYTECODE=1` and `NUMPY_EXPERIMENTAL_ARRAY_FUNCTION=0` for improved runtime behavior
+
+**Dependencies Updated:**
+- `numpy>=2.3.0` (up from 2.2.6)
+- `pandas>=2.3.0` (up from 2.2.3)  
+- All other dependencies remain compatible with Python 3.13
+
+**Replit Environment Improvements:**
+- Enhanced stability with Python 3.13
+- Improved package compatibility
+- Better memory management with bytecode compilation disabled
+- Streamlined deployment configuration
+
+## Previous Updates (2025-06-17)
 
 ### Image Processing Improvements
 
