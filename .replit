@@ -4,7 +4,7 @@ modules = ["python-base-3.13", "postgresql-16"]
 
 [nix]
 channel = "unstable"
-packages = ["glibcLocales", "libGL", "libGLU", "libxcrypt", "pkg-config", "xsimd"]
+packages = ["freetype", "glibcLocales", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "pkg-config", "tcl", "tk", "xsimd", "zlib"]
 
 [[ports]]
 localPort = 5000
