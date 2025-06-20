@@ -1291,7 +1291,13 @@ def record_mtf_response_and_advance(trial_data, is_clear):
     save_experiment_data(mtf_trial_result)
 
     # Check if we should show feedback or go directly to next trial
-    show_feedback = st.session_state.get('show_trial_feedback', True)
+    show_feedback = st.session_state.get('show_trial_feedback', False)
+    
+    # Debug information - check if setting exists
+    if 'show_trial_feedback' in st.session_state:
+        print(f"🔧 Trial feedback setting: {show_feedback}")
+    else:
+        print("⚠️ show_trial_feedback setting not found in session state, defaulting to False")
 
     if show_feedback:
         # Store response for feedback
