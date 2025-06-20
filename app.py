@@ -924,10 +924,17 @@ def save_experiment_data(trial_result):
                 storage_data['mtf_value'] = None
                 storage_data['ado_stimulus_value'] = storage_data.get('ado_stimulus_value')
 
+        # Enhanced debugging for critical experimental fields
+        critical_fields = ['participant_id', 'trial_number', 'mtf_value', 'stimulus_image_file', 'response', 'reaction_time']
         print(f"🔧 Prepared data for storage: {list(storage_data.keys())}")
+        print(f"📊 Critical experimental data:")
+        for field in critical_fields:
+            value = storage_data.get(field, 'MISSING')
+            print(f"   {field}: {value}")
 
         # Save to CSV (primary backup)
         csv_manager.save_trial_data(participant_id, storage_data)
+        print(f"✅ Trial data saved to CSV")
 
         # Save to database (secondary backup) - use same formatted data
         if db_initialized and db_manager:
@@ -936,9 +943,23 @@ def save_experiment_data(trial_result):
                 try:
                     db_manager.save_trial(experiment_id, storage_data)
                     print(f"✅ Trial data saved to database (experiment_id: {experiment_id})")
-                    print(f"🔧 Database data keys: {list(storage_data.keys())}")
+                    
+                    # Verify what was actually saved to database
+                    try:
+                        saved_data = db_manager.get_experiment_data(experiment_id)
+                        if saved_data and saved_data['trials']:
+                            latest_trial = saved_data['trials'][-1]  # Get the latest trial
+                            print(f"🔍 Database verification - saved fields: {list(latest_trial.keys())}")
+                            print(f"📊 Database critical fields:")
+                            for field in critical_fields:
+                                db_value = latest_trial.get(field, 'MISSING')
+                                print(f"   {field}: {db_value}")
+                    except Exception as verify_error:
+                        print(f"⚠️ Database verification failed: {verify_error}")
+                        
                 except Exception as db_error:
                     print(f"⚠️ Database trial save failed: {db_error}")
+                    print(f"🔧 Error details: {type(db_error).__name__}: {str(db_error)}")
             else:
                 print("⚠️ No experiment_id available, skipping database save")
         else:

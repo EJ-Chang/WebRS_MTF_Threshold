@@ -56,6 +56,11 @@ class Trial(Base):
     reaction_time = Column(Float)
     timestamp = Column(DateTime, default=datetime.now)
     
+    # Additional fields to match CSV format
+    participant_id = Column(String)  # Direct participant reference for easier querying
+    experiment_type = Column(String)  # 'MTF_Clarity', '2AFC', etc.
+    experiment_timestamp = Column(String)  # ISO format experiment start timestamp
+    
     experiment = relationship("Experiment", back_populates="trials")
 
 class DatabaseManager:
@@ -147,7 +152,7 @@ class DatabaseManager:
             session.close()
     
     def save_trial(self, experiment_id: int, trial_data: dict):
-        """Save a trial to the database"""
+        """Save a trial to the database - ensuring consistency with CSV format"""
         session = self.get_session()
         try:
             # Convert numpy types to standard Python types to avoid database issues
@@ -160,6 +165,7 @@ class DatabaseManager:
                     return float(value) if 'float' in str(value.dtype) else int(value)
                 return value
             
+            # Ensure all CSV fields are properly mapped to database fields
             trial = Trial(
                 experiment_id=experiment_id,
                 trial_number=trial_data.get('trial_number'),
@@ -169,14 +175,33 @@ class DatabaseManager:
                 stimulus_difference=convert_numpy_value(trial_data.get('stimulus_difference')),
                 mtf_value=convert_numpy_value(trial_data.get('mtf_value')),
                 ado_stimulus_value=convert_numpy_value(trial_data.get('ado_stimulus_value')),
-                stimulus_image_file=trial_data.get('stimulus_image_file'),  # Record image file used
+                stimulus_image_file=trial_data.get('stimulus_image_file'),
                 response=trial_data.get('response'),
                 is_correct=trial_data.get('is_correct'),
                 reaction_time=convert_numpy_value(trial_data.get('reaction_time')),
-                timestamp=datetime.fromisoformat(trial_data.get('timestamp', datetime.now().isoformat()))
+                timestamp=datetime.fromisoformat(trial_data.get('timestamp', datetime.now().isoformat())),
+                # New fields to match CSV format exactly
+                participant_id=trial_data.get('participant_id'),
+                experiment_type=trial_data.get('experiment_type'),
+                experiment_timestamp=trial_data.get('experiment_timestamp')
             )
             session.add(trial)
             session.commit()
+            
+            # Debug: Log what was saved vs what was in trial_data
+            print(f"🔧 Database trial saved with fields: {list(trial_data.keys())}")
+            db_fields = {
+                'experiment_id', 'trial_number', 'is_practice', 'left_stimulus', 
+                'right_stimulus', 'stimulus_difference', 'mtf_value', 'ado_stimulus_value',
+                'stimulus_image_file', 'response', 'is_correct', 'reaction_time', 'timestamp',
+                'participant_id', 'experiment_type', 'experiment_timestamp'
+            }
+            missing_in_db = set(trial_data.keys()) - db_fields
+            if missing_in_db:
+                print(f"⚠️ CSV fields not saved to database: {missing_in_db}")
+            else:
+                print("✅ All CSV fields successfully mapped to database")
+            
             return trial.id
         finally:
             session.close()
@@ -222,10 +247,14 @@ class DatabaseManager:
                         'stimulus_difference': trial.stimulus_difference,
                         'mtf_value': trial.mtf_value,
                         'ado_stimulus_value': trial.ado_stimulus_value,
+                        'stimulus_image_file': trial.stimulus_image_file,
                         'response': trial.response,
                         'is_correct': trial.is_correct,
                         'reaction_time': trial.reaction_time,
-                        'timestamp': trial.timestamp
+                        'timestamp': trial.timestamp,
+                        'participant_id': trial.participant_id,
+                        'experiment_type': trial.experiment_type,
+                        'experiment_timestamp': trial.experiment_timestamp
                     }
                     for trial in trials
                 ]
