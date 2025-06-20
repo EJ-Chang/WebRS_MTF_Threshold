@@ -169,5 +169,25 @@ Temporary Items
 # Project specific
 psychophysics_env/
 results/
-experiment_data/
 uv.lock
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+psychophysics_experiments.db
+
+# Experiment data (uncomment if you want to ignore CSV data)
+# experiment_data/
+
+# Temporary test files
+test_*.py
+*_test_*.csv
+*_test_*.json
+
+# Replit specific
+.replit
+replit.nix
+
+# Streamlit
+.streamlit/

@@ -1,0 +1,15 @@
+{
+  "participant_id": "test_app_user_5251",
+  "created_at": "2025-06-20T14:55:18.150418",
+  "experiment_config": {
+    "experiment_type": "MTF_test",
+    "use_ado": true,
+    "num_trials": 10,
+    "num_practice_trials": 2,
+    "stimulus_duration": 1.0,
+    "inter_trial_interval": 0.5
+  },
+  "status": "started",
+  "total_trials": 0,
+  "completed_trials": 0
+}
