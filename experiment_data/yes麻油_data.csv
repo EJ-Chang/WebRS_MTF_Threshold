@@ -2,3 +2,5 @@ trial_number,mtf_value,response,reaction_time,timestamp,participant_id,experimen
 1,50.0,not_clear,3.885395050048828,2025-06-20T06:08:14.007105,yes麻油,MTF_Clarity,text_img.png
 2,75.0,clear,4.518781900405884,2025-06-20T06:08:24.461275,yes麻油,MTF_Clarity,text_img.png
 1,50.0,not_clear,5.912070274353027,2025-06-20T06:11:00.926802,yes麻油,MTF_Clarity,stimuli_img.png
+1,50.0,not_clear,5.456892967224121,2025-06-20T06:17:10.761092,yes麻油,MTF_Clarity,tw_newsimg.png
+2,75.0,clear,5.39670991897583,2025-06-20T06:17:23.041931,yes麻油,MTF_Clarity,tw_newsimg.png
