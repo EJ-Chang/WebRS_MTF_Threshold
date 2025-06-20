@@ -1,0 +1,3 @@
+trial_number,mtf_value,response,reaction_time,timestamp,participant_id,experiment_type,stimulus_image_file
+1,50.0,not_clear,3.885395050048828,2025-06-20T06:08:14.007105,yes麻油,MTF_Clarity,text_img.png
+2,75.0,clear,4.518781900405884,2025-06-20T06:08:24.461275,yes麻油,MTF_Clarity,text_img.png
