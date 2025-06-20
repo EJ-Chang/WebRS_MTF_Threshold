@@ -261,15 +261,25 @@ def plot_psychometric_function(trial_data):
     # Convert to DataFrame for easier manipulation
     df = pd.DataFrame(trial_data)
 
-    # Group by stimulus difference and calculate accuracy
-    grouped = df.groupby('stimulus_difference').agg({
-        'is_correct': ['count', 'sum', 'mean'],
-        'reaction_time': 'mean'
-    }).round(3)
-
-    # Flatten column names
-    grouped.columns = ['n_trials', 'n_correct', 'accuracy', 'mean_rt']
-    grouped = grouped.reset_index()
+    # Group by MTF value and calculate "clear" response rate
+    if 'mtf_value' in df.columns and 'response' in df.columns:
+        # For MTF experiments: calculate proportion of "clear" responses
+        df['clear_response'] = (df['response'] == 'clear').astype(int)
+        grouped = df.groupby('mtf_value').agg({
+            'clear_response': ['count', 'sum', 'mean'],
+            'reaction_time': 'mean'
+        }).round(3)
+        
+        # Flatten column names
+        grouped.columns = ['n_trials', 'n_clear', 'clear_rate', 'mean_rt']
+        grouped = grouped.reset_index()
+        
+        y_label = "Proportion 'Clear' Responses"
+        x_label = "MTF Value (%)"
+    else:
+        # Fallback for legacy data format
+        st.warning("Data format not compatible with MTF analysis")
+        return
 
     # Filter out groups with very few trials (less than 2)
     grouped = grouped[grouped['n_trials'] >= 2]
@@ -283,8 +293,8 @@ def plot_psychometric_function(trial_data):
 
     # Add data points
     fig.add_trace(go.Scatter(
-        x=grouped['stimulus_difference'],
-        y=grouped['accuracy'],
+        x=grouped['mtf_value'],
+        y=grouped['clear_rate'],
         mode='markers+lines',
         marker=dict(
             size=grouped['n_trials'] * 3,  # Size represents number of trials
@@ -294,42 +304,42 @@ def plot_psychometric_function(trial_data):
             colorbar=dict(title="Mean RT (s)")
         ),
         line=dict(width=2),
-        name='Observed Accuracy',
+        name='MTF Clear Rate',
         hovertemplate=
-        'Stimulus Difference: %{x:.3f}<br>' +
-        'Accuracy: %{y:.1%}<br>' +
+        f'{x_label}: %{{x:.1f}}<br>' +
+        f'{y_label}: %{{y:.1%}}<br>' +
         'Trials: %{text}<br>' +
         'Mean RT: %{marker.color:.2f}s<extra></extra>',
         text=grouped['n_trials']
     ))
 
-    # Add threshold line (75% correct)
+    # Add 50% response line (clarity threshold)
     fig.add_hline(
-        y=0.75, 
+        y=0.5, 
         line_dash="dash", 
         line_color="red",
-        annotation_text="75% Threshold"
+        annotation_text="50% Clear Threshold"
     )
 
-    # Estimate threshold (interpolation to 75% point)
+    # Estimate threshold (interpolation to 50% point for MTF)
     if len(grouped) >= 2:
         # Find threshold by interpolation
         try:
-            threshold_estimate = np.interp(0.75, grouped['accuracy'], grouped['stimulus_difference'])
+            threshold_estimate = np.interp(0.5, grouped['clear_rate'], grouped['mtf_value'])
             fig.add_vline(
                 x=threshold_estimate,
                 line_dash="dash",
                 line_color="orange",
-                annotation_text=f"Est. Threshold: {threshold_estimate:.3f}"
+                annotation_text=f"Est. Threshold: {threshold_estimate:.1f}%"
             )
         except Exception:
             pass
 
     # Update layout
     fig.update_layout(
-        title="Psychometric Function - Brightness Discrimination",
-        xaxis_title="Stimulus Difference (Brightness)",
-        yaxis_title="Proportion Correct",
+        title="MTF Clarity Psychometric Function",
+        xaxis_title=x_label,
+        yaxis_title=y_label,
         yaxis=dict(range=[0, 1], tickformat='.0%'),
         width=700,
         height=500,
@@ -339,7 +349,7 @@ def plot_psychometric_function(trial_data):
     st.plotly_chart(fig, use_container_width=True)
 
     # Show data table
-    with st.expander("Detailed Results by Stimulus Difference"):
+    with st.expander("Detailed Results by MTF Value"):
         st.dataframe(grouped, use_container_width=True)
 
     # Summary statistics
@@ -347,17 +357,20 @@ def plot_psychometric_function(trial_data):
     with col1:
         st.metric("Total Trials", len(df))
     with col2:
-        overall_accuracy = df['is_correct'].mean()
-        st.metric("Overall Accuracy", f"{overall_accuracy:.1%}")
+        if 'clear_response' in locals():
+            overall_clear_rate = df['clear_response'].mean()
+            st.metric("Overall Clear Rate", f"{overall_clear_rate:.1%}")
+        else:
+            st.metric("Overall Clear Rate", "N/A")
     with col3:
         if len(grouped) >= 2:
             try:
-                threshold_est = np.interp(0.75, grouped['accuracy'], grouped['stimulus_difference'])
-                st.metric("75% Threshold", f"{threshold_est:.3f}")
+                threshold_est = np.interp(0.5, grouped['clear_rate'], grouped['mtf_value'])
+                st.metric("50% Threshold", f"{threshold_est:.1f}%")
             except Exception:
-                st.metric("75% Threshold", "N/A")
+                st.metric("50% Threshold", "N/A")
         else:
-            st.metric("75% Threshold", "N/A")
+            st.metric("50% Threshold", "N/A")
 
 # Initialize session state variables
 if 'experiment_stage' not in st.session_state:
@@ -597,13 +610,14 @@ def welcome_screen():
                     st.info(f"📸 Stimulus images used: {', '.join(stimulus_info)}")
 
             # Show summary statistics
-            if 'is_correct' in df.columns:
+            if 'response' in df.columns:
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Total Trials", len(df))
                 with col2:
-                    accuracy = df['is_correct'].mean()
-                    st.metric("Overall Accuracy", f"{accuracy:.1%}")
+                    if 'response' in df.columns:
+                        clear_rate = (df['response'] == 'clear').mean()
+                        st.metric("Overall Clear Rate", f"{clear_rate:.1%}")
                 with col3:
                     if 'reaction_time' in df.columns:
                         avg_rt = df['reaction_time'].mean()
@@ -611,18 +625,17 @@ def welcome_screen():
 
         except Exception as e:
             st.error(f"Error reading file: {str(e)}")
-            st.info("Please make sure the CSV file has the correct format with columns like 'stimulus_difference', 'is_correct', 'reaction_time', etc.")
+            st.info("Please make sure the CSV file has the correct format with columns like 'mtf_value', 'response', 'reaction_time', etc.")
 
             # Show expected format
             with st.expander("Expected CSV Format"):
                 sample_data = {
                     'trial_number': [1, 2, 3],
-                    'stimulus_difference': [0.1, 0.2, 0.15],
-                    'is_correct': [True, False, True],
+                    'mtf_value': [45.5, 67.8, 52.3],
+                    'response': ['clear', 'not_clear', 'clear'],
                     'reaction_time': [1.2, 1.5, 1.1],
-                    'left_stimulus': [0.4, 0.4, 0.4],
-                    'right_stimulus': [0.5, 0.6, 0.55],
-                    'response': ['right', 'left', 'right']
+                    'participant_id': ['P001', 'P001', 'P001'],
+                    'stimulus_image_file': ['test_img.png', 'test_img.png', 'test_img.png']
                 }
                 sample_df = pd.DataFrame(sample_data)
                 st.dataframe(sample_df)
@@ -906,22 +919,27 @@ def save_experiment_data(trial_result):
         
         # MTF experiments: Calculate derived fields
         if storage_data.get('experiment_type') == 'MTF_Clarity':
-            # For MTF experiments, is_correct is not applicable (subjective task)
-            storage_data['is_correct'] = None
-            storage_data['left_stimulus'] = None
-            storage_data['right_stimulus'] = None
-            storage_data['stimulus_difference'] = None
-            storage_data['ado_stimulus_value'] = storage_data.get('mtf_value')  # For database compatibility
+            # For MTF experiments, these fields are not applicable (subjective task)
+            pass  # No additional fields needed for MTF experiments
+            # 嘗試取得下一個 ADO 建議值
+            if (hasattr(st.session_state.get('exp_manager'), 'ado_engine') and 
+                st.session_state.exp_manager.ado_engine is not None and 
+                not st.session_state.exp_manager.is_experiment_complete()):
+                try:
+                    next_mtf_value = st.session_state.exp_manager.ado_engine.get_optimal_design()
+                    storage_data['ado_stimulus_value'] = next_mtf_value
+                    print(f"🔄 ADO next trial prediction: {next_mtf_value}")
+                except Exception as e:
+                    print(f"⚠️ ADO prediction failed: {e}, using current MTF value")
+                    storage_data['ado_stimulus_value'] = storage_data.get('mtf_value')  # 回退到當前值
+            else:
+                storage_data['ado_stimulus_value'] = storage_data.get('mtf_value')  # 實驗結束或無ADO時使用當前值
+                print("📊 Using current MTF value (experiment complete or no ADO engine)")
             storage_data['is_practice'] = False  # MTF experiments are not practice trials
         else:
-            # For 2AFC experiments: Calculate traditional fields
-            if 'left_stimulus' in storage_data and 'right_stimulus' in storage_data:
-                storage_data['stimulus_difference'] = abs(storage_data['left_stimulus'] - storage_data['right_stimulus'])
-                if storage_data['response'] in ['left', 'right']:
-                    expected = 'left' if storage_data['left_stimulus'] > storage_data['right_stimulus'] else 'right'
-                    storage_data['is_correct'] = storage_data['response'] == expected
-                storage_data['mtf_value'] = None
-                storage_data['ado_stimulus_value'] = storage_data.get('ado_stimulus_value')
+            # For 2AFC experiments: Calculate traditional fields (deprecated)
+            storage_data['mtf_value'] = None
+            storage_data['ado_stimulus_value'] = storage_data.get('ado_stimulus_value')
 
         # Enhanced debugging for critical experimental fields
         critical_fields = ['participant_id', 'trial_number', 'mtf_value', 'stimulus_image_file', 'response', 'reaction_time']
@@ -989,10 +1007,6 @@ def save_experiment_data(trial_result):
                 # Use the same data format as main process
                 fallback_data = trial_result.copy()
                 if fallback_data.get('experiment_type') == 'MTF_Clarity':
-                    fallback_data['is_correct'] = None
-                    fallback_data['left_stimulus'] = None
-                    fallback_data['right_stimulus'] = None
-                    fallback_data['stimulus_difference'] = None
                     fallback_data['ado_stimulus_value'] = fallback_data.get('mtf_value')
                     fallback_data['is_practice'] = False
                 
@@ -1017,8 +1031,6 @@ def record_response(response, trial_data, is_practice=False):
     trial_result = {
         'trial_number': trial_data['trial_number'],
         'is_practice': is_practice,
-        'left_stimulus': trial_data['left_stimulus'],
-        'right_stimulus': trial_data['right_stimulus'],
         'response': response,
         'reaction_time': reaction_time,
         'timestamp': datetime.now().isoformat(),
@@ -1142,7 +1154,7 @@ def mtf_trial_screen():
     if 'mtf_response_recorded' not in st.session_state:
         st.session_state.mtf_response_recorded = False
 
-    # Phase 1: Show fixation cross and wait 3 seconds with Python timing
+    # Phase 1: Setup new trial and transition to fixation
     if st.session_state.mtf_trial_phase == 'new_trial':
         # Reset response recorded state for new trial
         st.session_state.mtf_response_recorded = False
@@ -1157,9 +1169,28 @@ def mtf_trial_screen():
             st.session_state.mtf_current_trial = current_trial
             print(f"🆕 New trial {current_trial['trial_number']} started, response_recorded reset to False")
 
-        current_trial = st.session_state.mtf_current_trial
+        # Immediately transition to fixation
+        st.session_state.mtf_trial_phase = 'fixation'
+        st.session_state.mtf_fixation_start_time = time.time()
+        st.session_state.ado_processing_completed = False
+        st.rerun()
 
-        # Show fixation cross - no countdown needed
+    # Phase 1.5: Fixation cross with background ADO processing
+    elif st.session_state.mtf_trial_phase == 'fixation':
+        current_trial = st.session_state.mtf_current_trial
+        
+        if current_trial is None:
+            st.error("Trial data missing in fixation, restarting...")
+            st.session_state.mtf_trial_phase = 'new_trial'
+            st.rerun()
+            return
+
+        # Calculate time elapsed since fixation started
+        fixation_elapsed = time.time() - st.session_state.mtf_fixation_start_time
+        fixation_duration = 3.0  # 3 seconds as originally designed
+        remaining_time = max(0, fixation_duration - fixation_elapsed)
+
+        # Show fixation cross
         st.markdown("""
         <div style="
             display: flex;
@@ -1182,6 +1213,16 @@ def mtf_trial_screen():
         </div>
         """, unsafe_allow_html=True)
 
+        # Process any pending ADO computation from previous trial
+        if not st.session_state.get('ado_processing_completed', False):
+            if 'pending_response_data' in st.session_state:
+                print(f"🔄 Processing ADO during fixation (elapsed: {fixation_elapsed:.2f}s)")
+                process_pending_response()
+                st.session_state.ado_processing_completed = True
+                print(f"✅ ADO processing completed during fixation")
+            else:
+                st.session_state.ado_processing_completed = True
+
         # Show trial info at bottom
         st.markdown("---")
         st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
@@ -1190,13 +1231,21 @@ def mtf_trial_screen():
         st.progress(progress)
         st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
 
-        # Python controls the timing - wait exactly 3 seconds
-        time.sleep(3.0)
-
-        # Time up, advance to stimulus phase
-        st.session_state.mtf_trial_phase = 'stimulus'
-        st.session_state.mtf_stimulus_onset_time = time.time()
-        st.rerun()
+        # Check if fixation time is complete
+        if fixation_elapsed >= fixation_duration:
+            # Time up, advance to stimulus phase
+            st.session_state.mtf_trial_phase = 'stimulus'
+            st.session_state.mtf_stimulus_onset_time = time.time()
+            st.rerun()
+        else:
+            # Simple approach: wait for remaining time, but allow ADO to complete first
+            # The key insight: ADO processing happens early in fixation, so most of 
+            # the remaining time is just pure waiting (which is what we want)
+            remaining_sleep = min(remaining_time, 0.5)  # Max 0.5s sleep to stay responsive
+            if remaining_sleep > 0.05:  # Only sleep if meaningful time remains
+                time.sleep(remaining_sleep)
+            # Always rerun to check time again
+            st.rerun()
 
     # Phase 2: Show stimulus and accept responses (after 1 sec viewing)
     elif st.session_state.mtf_trial_phase == 'stimulus':
@@ -1306,7 +1355,7 @@ def mtf_trial_screen():
         st.progress(progress)
         st.write(f"Trial {current_trial['trial_number']} of {total_trials}")
 
-    # Phase 3: Show ADO feedback (1 second)
+    # Phase 3: Show ADO feedback with background processing
     elif st.session_state.mtf_trial_phase == 'feedback':
         current_trial = st.session_state.mtf_current_trial
 
@@ -1315,6 +1364,11 @@ def mtf_trial_screen():
             st.session_state.mtf_trial_phase = 'new_trial'
             st.rerun()
             return
+
+        # Process pending ADO computation if not yet done
+        if 'pending_response_data' in st.session_state:
+            print(f"🔄 Processing ADO during feedback display...")
+            process_pending_response()
 
         # Header
         st.title(f"MTF Clarity Test - Trial {current_trial['trial_number']}")
@@ -1369,7 +1423,7 @@ def mtf_trial_screen():
     display_ado_monitor(exp_manager, trial_num)
 
 def record_mtf_response_and_advance(trial_data, is_clear):
-    """Record MTF response and advance based on show_trial_feedback setting"""
+    """Record MTF response immediately and advance to fixation for background ADO processing"""
     # Prevent double recording
     if st.session_state.get('mtf_response_recorded', False):
         print("⚠️ Response already recorded, ignoring duplicate click")
@@ -1385,9 +1439,54 @@ def record_mtf_response_and_advance(trial_data, is_clear):
 
     # Calculate reaction time
     reaction_time = time.time() - st.session_state.mtf_stimulus_onset_time
+
+    # Store pending trial data for processing during fixation
+    st.session_state.pending_response_data = {
+        'trial_data': trial_data,
+        'is_clear': is_clear,
+        'reaction_time': reaction_time,
+        'response_time': time.time(),
+        'stimulus_onset_time': st.session_state.mtf_stimulus_onset_time
+    }
+
+    # Check if we should show feedback or go directly to next trial
+    show_feedback = st.session_state.get('show_trial_feedback', True)
+    
+    print(f"🔧 Trial feedback setting: {show_feedback}")
+
+    if show_feedback:
+        # Store response for feedback display
+        st.session_state.last_mtf_response = 'Clear' if is_clear else 'Not Clear'
+        # Go to feedback phase (ADO processing will happen there)
+        st.session_state.mtf_trial_phase = 'feedback'
+        st.session_state.mtf_phase_start_time = time.time()
+    else:
+        # Skip feedback, go directly to next trial after processing current response
+        # First process the ADO computation immediately
+        process_pending_response()
+        
+        # Then reset for next trial
+        st.session_state.mtf_trial_phase = 'new_trial'
+        st.session_state.mtf_current_trial = None
+        st.session_state.mtf_response_recorded = False
+        if 'last_mtf_response' in st.session_state:
+            del st.session_state.last_mtf_response
+
+    # Immediate rerun for smooth transition
+    st.rerun()
+
+def process_pending_response():
+    """Process the pending response data with ADO computation during fixation/feedback"""
+    if 'pending_response_data' not in st.session_state:
+        return None
+
+    pending_data = st.session_state.pending_response_data
+    trial_data = pending_data['trial_data']
+    is_clear = pending_data['is_clear']
+    reaction_time = pending_data['reaction_time']
+    
     exp_manager = st.session_state.mtf_experiment_manager
 
-    # Create trial result
     # Get stimulus image file name
     stimulus_image_file = "unknown"
     if 'selected_stimulus_image' in st.session_state and st.session_state.selected_stimulus_image:
@@ -1401,41 +1500,27 @@ def record_mtf_response_and_advance(trial_data, is_clear):
         'timestamp': datetime.now().isoformat(),
         'participant_id': st.session_state.get('participant_id', 'unknown'),
         'experiment_type': 'MTF_Clarity',
-        'stimulus_image_file': stimulus_image_file  # 記錄使用的圖片檔名
+        'stimulus_image_file': stimulus_image_file
     }
 
-    # Record and save
-    exp_manager.record_response(trial_data, is_clear, reaction_time)
-    save_experiment_data(mtf_trial_result)
-
-    # Check if we should show feedback or go directly to next trial
-    show_feedback = st.session_state.get('show_trial_feedback', True)
-    
-    # Debug information - check if setting exists
-    if 'show_trial_feedback' in st.session_state:
-        print(f"🔧 Trial feedback setting: {show_feedback}")
-    else:
-        print("⚠️ show_trial_feedback setting not found in session state, defaulting to True (UI default)")
-
-    if show_feedback:
-        # Store response for feedback
-        st.session_state.last_mtf_response = 'Clear' if is_clear else 'Not Clear'
-
-        # Advance to feedback phase
-        st.session_state.mtf_trial_phase = 'feedback'
-        st.session_state.mtf_phase_start_time = time.time()
-    else:
-        # Skip feedback, go directly to next trial
-        st.session_state.mtf_trial_phase = 'new_trial'
-        st.session_state.mtf_fixation_started = False
-        # mtf_phase_start_time will be set when fixation actually starts
-        st.session_state.mtf_current_trial = None
-        st.session_state.mtf_response_recorded = False
-        if 'last_mtf_response' in st.session_state:
-            del st.session_state.last_mtf_response
-
-    # Need rerun to update UI state after response recording
-    st.rerun()
+    # Now perform the ADO computation (this is what used to block the UI)
+    print(f"🔄 Processing ADO computation for trial {trial_data['trial_number']}...")
+    try:
+        exp_manager.record_response(trial_data, is_clear, reaction_time)
+        save_experiment_data(mtf_trial_result)
+        print(f"✅ ADO computation completed for trial {trial_data['trial_number']}")
+        
+        
+        # Clear pending data
+        del st.session_state.pending_response_data
+        return mtf_trial_result
+        
+    except Exception as e:
+        print(f"❌ ADO computation failed: {e}")
+        # Save basic data even if ADO fails
+        save_experiment_data(mtf_trial_result)
+        del st.session_state.pending_response_data
+        return mtf_trial_result
 
 def record_mtf_response_smooth(trial_data, is_clear):
     """Record MTF response with smooth auto-advance flow"""

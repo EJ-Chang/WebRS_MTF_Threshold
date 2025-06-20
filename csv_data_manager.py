@@ -295,10 +295,10 @@ class CSVDataManager:
         if df.empty:
             return {}
         
-        # Group by stimulus difference
-        if 'stimulus_difference' in df.columns:
-            grouped = df.groupby('stimulus_difference').agg({
-                'is_correct': ['count', 'sum', 'mean'],
+        # Group by MTF value for MTF experiments
+        if 'mtf_value' in df.columns:
+            grouped = df.groupby('mtf_value').agg({
+                'response': 'count',
                 'reaction_time': ['mean', 'std']
             }).round(3)
             

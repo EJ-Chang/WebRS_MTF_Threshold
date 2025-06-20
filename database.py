@@ -43,16 +43,12 @@ class Trial(Base):
     is_practice = Column(Boolean, default=False)
     
     # Stimulus parameters
-    left_stimulus = Column(Float)
-    right_stimulus = Column(Float)
-    stimulus_difference = Column(Float)
     mtf_value = Column(Float)  # For MTF experiments
     ado_stimulus_value = Column(Float)  # ADO selected value
     stimulus_image_file = Column(String)  # Record which image file was used
     
     # Response data
     response = Column(String)  # 'left', 'right', 'clear', 'not_clear'
-    is_correct = Column(Boolean)
     reaction_time = Column(Float)
     timestamp = Column(DateTime, default=datetime.now)
     
@@ -170,14 +166,10 @@ class DatabaseManager:
                 experiment_id=experiment_id,
                 trial_number=trial_data.get('trial_number'),
                 is_practice=trial_data.get('is_practice', False),
-                left_stimulus=convert_numpy_value(trial_data.get('left_stimulus')),
-                right_stimulus=convert_numpy_value(trial_data.get('right_stimulus')),
-                stimulus_difference=convert_numpy_value(trial_data.get('stimulus_difference')),
                 mtf_value=convert_numpy_value(trial_data.get('mtf_value')),
                 ado_stimulus_value=convert_numpy_value(trial_data.get('ado_stimulus_value')),
                 stimulus_image_file=trial_data.get('stimulus_image_file'),
                 response=trial_data.get('response'),
-                is_correct=trial_data.get('is_correct'),
                 reaction_time=convert_numpy_value(trial_data.get('reaction_time')),
                 timestamp=datetime.fromisoformat(trial_data.get('timestamp', datetime.now().isoformat())),
                 # New fields to match CSV format exactly
@@ -191,9 +183,8 @@ class DatabaseManager:
             # Debug: Log what was saved vs what was in trial_data
             print(f"🔧 Database trial saved with fields: {list(trial_data.keys())}")
             db_fields = {
-                'experiment_id', 'trial_number', 'is_practice', 'left_stimulus', 
-                'right_stimulus', 'stimulus_difference', 'mtf_value', 'ado_stimulus_value',
-                'stimulus_image_file', 'response', 'is_correct', 'reaction_time', 'timestamp',
+                'experiment_id', 'trial_number', 'is_practice', 'mtf_value', 'ado_stimulus_value',
+                'stimulus_image_file', 'response', 'reaction_time', 'timestamp',
                 'participant_id', 'experiment_type', 'experiment_timestamp'
             }
             missing_in_db = set(trial_data.keys()) - db_fields
@@ -242,14 +233,10 @@ class DatabaseManager:
                     {
                         'trial_number': trial.trial_number,
                         'is_practice': trial.is_practice,
-                        'left_stimulus': trial.left_stimulus,
-                        'right_stimulus': trial.right_stimulus,
-                        'stimulus_difference': trial.stimulus_difference,
                         'mtf_value': trial.mtf_value,
                         'ado_stimulus_value': trial.ado_stimulus_value,
                         'stimulus_image_file': trial.stimulus_image_file,
                         'response': trial.response,
-                        'is_correct': trial.is_correct,
                         'reaction_time': trial.reaction_time,
                         'timestamp': trial.timestamp,
                         'participant_id': trial.participant_id,
