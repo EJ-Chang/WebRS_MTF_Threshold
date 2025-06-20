@@ -1,5 +1,15 @@
 run = "python main.py"
 entrypoint = "main.py"
+modules = ["python-base-3.13"]
 
 [nix]
 channel = "unstable"
+packages = ["glibcLocales", "libGL", "libGLU", "libxcrypt", "pkg-config", "xsimd"]
+
+[[ports]]
+localPort = 5000
+externalPort = 5000
+
+[[ports]]
+localPort = 8501
+externalPort = 80

@@ -46,10 +46,10 @@ def check_dependencies():
     
     if missing_packages:
         print(f"❌ Missing packages: {', '.join(missing_packages)}")
-        print("Installing missing packages...")
-        for package in missing_packages:
-            subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
-        print("✅ All packages installed")
+        # print("Installing missing packages...")
+        # for package in missing_packages:
+            # subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
+        # print("✅ All packages installed")
     else:
         print("✅ All dependencies satisfied")
 
