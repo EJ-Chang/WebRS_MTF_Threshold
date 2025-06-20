@@ -902,23 +902,41 @@ def save_experiment_data(trial_result):
             
             st.session_state.participant_created = True
 
-        # Calculate derived fields
-        if 'left_stimulus' in trial_result and 'right_stimulus' in trial_result:
-            trial_result['stimulus_difference'] = abs(trial_result['left_stimulus'] - trial_result['right_stimulus'])
-            if trial_result['response'] in ['left', 'right']:
-                expected = 'left' if trial_result['left_stimulus'] > trial_result['right_stimulus'] else 'right'
-                trial_result['is_correct'] = trial_result['response'] == expected
+        # Prepare data for storage - ensure consistent format for both CSV and Database
+        storage_data = trial_result.copy()
+        
+        # MTF experiments: Calculate derived fields
+        if storage_data.get('experiment_type') == 'MTF_Clarity':
+            # For MTF experiments, is_correct is not applicable (subjective task)
+            storage_data['is_correct'] = None
+            storage_data['left_stimulus'] = None
+            storage_data['right_stimulus'] = None
+            storage_data['stimulus_difference'] = None
+            storage_data['ado_stimulus_value'] = storage_data.get('mtf_value')  # For database compatibility
+            storage_data['is_practice'] = False  # MTF experiments are not practice trials
+        else:
+            # For 2AFC experiments: Calculate traditional fields
+            if 'left_stimulus' in storage_data and 'right_stimulus' in storage_data:
+                storage_data['stimulus_difference'] = abs(storage_data['left_stimulus'] - storage_data['right_stimulus'])
+                if storage_data['response'] in ['left', 'right']:
+                    expected = 'left' if storage_data['left_stimulus'] > storage_data['right_stimulus'] else 'right'
+                    storage_data['is_correct'] = storage_data['response'] == expected
+                storage_data['mtf_value'] = None
+                storage_data['ado_stimulus_value'] = storage_data.get('ado_stimulus_value')
+
+        print(f"🔧 Prepared data for storage: {list(storage_data.keys())}")
 
         # Save to CSV (primary backup)
-        csv_manager.save_trial_data(participant_id, trial_result)
+        csv_manager.save_trial_data(participant_id, storage_data)
 
-        # Save to database (secondary backup)
+        # Save to database (secondary backup) - use same formatted data
         if db_initialized and db_manager:
             experiment_id = st.session_state.get('experiment_id')
             if experiment_id:
                 try:
-                    db_manager.save_trial(experiment_id, trial_result)
+                    db_manager.save_trial(experiment_id, storage_data)
                     print(f"✅ Trial data saved to database (experiment_id: {experiment_id})")
+                    print(f"🔧 Database data keys: {list(storage_data.keys())}")
                 except Exception as db_error:
                     print(f"⚠️ Database trial save failed: {db_error}")
             else:
@@ -931,7 +949,15 @@ def save_experiment_data(trial_result):
             st.session_state.saved_trials = 0
         st.session_state.saved_trials += 1
 
-        print(f"✅ Trial data saved to both CSV and database for participant: {participant_id}")
+        # Verify data consistency
+        csv_success = True
+        db_success = db_initialized and db_manager and st.session_state.get('experiment_id')
+        
+        print(f"✅ Trial data storage summary:")
+        print(f"   📁 CSV: {'✅ Success' if csv_success else '❌ Failed'}")
+        print(f"   🐘 Database: {'✅ Success' if db_success else '❌ Not available/failed'}")
+        print(f"   📊 Data keys: {list(storage_data.keys())}")
+        print(f"   👤 Participant: {participant_id}")
 
     except Exception as e:
         st.error(f"❌ 保存數據時出錯: {e}")
@@ -940,8 +966,18 @@ def save_experiment_data(trial_result):
         # If main process fails, ensure CSV still works as fallback
         try:
             if csv_manager:
-                csv_manager.save_trial_data(participant_id, trial_result)
-                print("✅ Fallback: Data saved to CSV only")
+                # Use the same data format as main process
+                fallback_data = trial_result.copy()
+                if fallback_data.get('experiment_type') == 'MTF_Clarity':
+                    fallback_data['is_correct'] = None
+                    fallback_data['left_stimulus'] = None
+                    fallback_data['right_stimulus'] = None
+                    fallback_data['stimulus_difference'] = None
+                    fallback_data['ado_stimulus_value'] = fallback_data.get('mtf_value')
+                    fallback_data['is_practice'] = False
+                
+                csv_manager.save_trial_data(participant_id, fallback_data)
+                print("✅ Fallback: Data saved to CSV only with consistent format")
             else:
                 print("❌ Critical: No storage methods available")
         except Exception as csv_error:
@@ -1088,6 +1124,9 @@ def mtf_trial_screen():
 
     # Phase 1: Show fixation cross and wait 3 seconds with Python timing
     if st.session_state.mtf_trial_phase == 'new_trial':
+        # Reset response recorded state for new trial
+        st.session_state.mtf_response_recorded = False
+        
         # Get next trial if not already available
         if st.session_state.mtf_current_trial is None:
             current_trial = exp_manager.get_next_trial()
@@ -1096,6 +1135,7 @@ def mtf_trial_screen():
                 st.rerun()
                 return
             st.session_state.mtf_current_trial = current_trial
+            print(f"🆕 New trial {current_trial['trial_number']} started, response_recorded reset to False")
 
         current_trial = st.session_state.mtf_current_trial
 
@@ -1140,6 +1180,10 @@ def mtf_trial_screen():
 
     # Phase 2: Show stimulus and accept responses (after 1 sec viewing)
     elif st.session_state.mtf_trial_phase == 'stimulus':
+        # Ensure response state is ready for this trial
+        if 'mtf_response_recorded' not in st.session_state:
+            st.session_state.mtf_response_recorded = False
+            
         current_trial = st.session_state.mtf_current_trial
 
         if current_trial is None:
@@ -1188,7 +1232,10 @@ def mtf_trial_screen():
 
         with main_col2:
             # Response buttons aligned with image center height
-            if not st.session_state.mtf_response_recorded:
+            response_recorded = st.session_state.get('mtf_response_recorded', False)
+            print(f"🔧 Button display check: response_recorded = {response_recorded}")
+            
+            if not response_recorded:
                 # Calculate button positioning based on EXACT image dimensions (no scaling)
                 if img_info and 'center_position' in img_info and img_info.get('no_scaling'):
                     # Use exact pixel positioning - image is now displayed at full size
@@ -1305,6 +1352,7 @@ def record_mtf_response_and_advance(trial_data, is_clear):
     """Record MTF response and advance based on show_trial_feedback setting"""
     # Prevent double recording
     if st.session_state.get('mtf_response_recorded', False):
+        print("⚠️ Response already recorded, ignoring duplicate click")
         return
 
     if 'mtf_stimulus_onset_time' not in st.session_state:
@@ -1313,6 +1361,7 @@ def record_mtf_response_and_advance(trial_data, is_clear):
 
     # Mark as recorded immediately to prevent double clicks
     st.session_state.mtf_response_recorded = True
+    print(f"🔧 Response recorded: {'Clear' if is_clear else 'Not Clear'}")
 
     # Calculate reaction time
     reaction_time = time.time() - st.session_state.mtf_stimulus_onset_time
@@ -1365,7 +1414,7 @@ def record_mtf_response_and_advance(trial_data, is_clear):
         if 'last_mtf_response' in st.session_state:
             del st.session_state.last_mtf_response
 
-    # Immediately rerun
+    # Need rerun to update UI state after response recording
     st.rerun()
 
 def record_mtf_response_smooth(trial_data, is_clear):
