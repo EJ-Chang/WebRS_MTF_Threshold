@@ -34,7 +34,6 @@ packages = [
     "gcc",
     "stdenv.cc.cc.lib",
     "glibc",
-    "streamlit",
 ]
 
 [env]
