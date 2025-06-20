@@ -79,17 +79,17 @@ class DatabaseManager:
     
     def _get_database_url(self):
         """Get database URL with Replit-specific handling"""
-        # Try Replit PostgreSQL first
-        replit_db = os.getenv('REPLIT_DB_URL')
-        if replit_db:
-            print("🐘 Using Replit PostgreSQL")
-            return replit_db
-        
-        # Try standard DATABASE_URL
+        # Try standard DATABASE_URL first (Replit PostgreSQL uses this)
         db_url = os.getenv('DATABASE_URL')
         if db_url:
-            print("🐘 Using DATABASE_URL PostgreSQL")
+            print("🐘 Using Replit PostgreSQL via DATABASE_URL")
             return db_url
+        
+        # Try legacy REPLIT_DB_URL
+        replit_db = os.getenv('REPLIT_DB_URL')
+        if replit_db:
+            print("🐘 Using REPLIT_DB_URL PostgreSQL")
+            return replit_db
         
         # Fall back to SQLite for development
         print("💾 Using SQLite fallback")
