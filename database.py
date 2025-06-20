@@ -118,6 +118,7 @@ class DatabaseManager:
                 participant = Participant(id=participant_id)
                 session.add(participant)
                 session.commit()
+                session.refresh(participant)  # Refresh to get the committed data
             return participant
         finally:
             session.close()

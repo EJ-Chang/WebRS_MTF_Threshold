@@ -11,6 +11,7 @@ from experiment import ExperimentManager
 from data_manager import DataManager
 from mtf_experiment import MTFExperimentManager
 from csv_data_manager import CSVDataManager
+from database import DatabaseManager
 import cv2
 from PIL import Image
 import base64
@@ -798,12 +799,18 @@ def run_trial(is_practice=False):
 
 
 def save_experiment_data(trial_result):
-    """Save experiment data to CSV file"""
+    """Save experiment data to CSV file and database"""
     try:
+        # Initialize CSV manager
         if 'csv_manager' not in st.session_state:
             st.session_state.csv_manager = CSVDataManager()
+        
+        # Initialize database manager
+        if 'db_manager' not in st.session_state:
+            st.session_state.db_manager = DatabaseManager()
 
         csv_manager = st.session_state.csv_manager
+        db_manager = st.session_state.db_manager
 
         # Get participant ID from session
         participant_id = st.session_state.get('participant_id')
@@ -830,7 +837,27 @@ def save_experiment_data(trial_result):
                     'experiment_type': experiment_type
                 }
 
+            # Create CSV record
             csv_manager.create_participant_record(participant_id, experiment_config)
+            
+            # Create database records
+            try:
+                db_manager.create_participant(participant_id)
+                experiment_id = db_manager.create_experiment(
+                    participant_id=participant_id,
+                    experiment_type=experiment_type,
+                    use_ado=experiment_config.get('use_ado', False),
+                    num_trials=experiment_config.get('num_trials'),
+                    num_practice_trials=experiment_config.get('num_practice_trials'),
+                    stimulus_duration=experiment_config.get('stimulus_duration'),
+                    inter_trial_interval=experiment_config.get('inter_trial_interval')
+                )
+                st.session_state.experiment_id = experiment_id
+                print(f"✅ Database experiment created with ID: {experiment_id}")
+            except Exception as db_error:
+                print(f"⚠️ Database experiment creation failed: {db_error}")
+                st.session_state.experiment_id = None
+            
             st.session_state.participant_created = True
 
         # Calculate derived fields
@@ -846,7 +873,13 @@ def save_experiment_data(trial_result):
         # Save to database (secondary backup)
         experiment_id = st.session_state.get('experiment_id')
         if experiment_id:
-            db_manager.save_trial(experiment_id, trial_result)
+            try:
+                db_manager.save_trial(experiment_id, trial_result)
+                print(f"✅ Trial data saved to database (experiment_id: {experiment_id})")
+            except Exception as db_error:
+                print(f"⚠️ Database trial save failed: {db_error}")
+        else:
+            print("⚠️ No experiment_id available, skipping database save")
 
         # Update session state
         if 'saved_trials' not in st.session_state:
