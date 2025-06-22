@@ -18,15 +18,10 @@ def setup_logging(level=logging.INFO):
     console_handler.setFormatter(formatter)
     console_handler.setLevel(level)
     
-    # File handler (optional)
-    try:
-        file_handler = logging.FileHandler(
-            f'experiment_log_{datetime.now().strftime("%Y%m%d")}.log'
-        )
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.DEBUG)
-    except Exception:
-        file_handler = None
+    # File handler (disabled for production use)
+    # Experiment data is saved in structured CSV and database formats
+    # Log files are only needed for debugging during development
+    file_handler = None
     
     # Root logger
     root_logger = logging.getLogger()

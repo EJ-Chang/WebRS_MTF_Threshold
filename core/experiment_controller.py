@@ -164,7 +164,8 @@ class ExperimentController:
             csv_manager = self.session.get_csv_manager()
             if csv_manager:
                 try:
-                    csv_manager.save_trial_data(trial_result)
+                    participant_id = self.session.get_participant_id()
+                    csv_manager.save_trial_data(participant_id, trial_result)
                     saved_successfully = True
                     logger.debug("Trial data saved to CSV")
                 except Exception as e:
@@ -174,9 +175,13 @@ class ExperimentController:
             db_manager = self.session.get_db_manager()
             if db_manager and self.session.is_db_manager_initialized():
                 try:
-                    db_manager.save_trial_data(trial_result)
-                    saved_successfully = True
-                    logger.debug("Trial data saved to database")
+                    experiment_id = self.session.get_experiment_id()
+                    if experiment_id:
+                        db_manager.save_trial(experiment_id, trial_result)
+                        saved_successfully = True
+                        logger.debug("Trial data saved to database")
+                    else:
+                        logger.warning("No experiment_id available for database saving")
                 except Exception as e:
                     logger.error(f"Failed to save to database: {e}")
             

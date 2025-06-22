@@ -85,6 +85,19 @@ def display_instructions_screen(session_manager) -> None:
             st.rerun()
         
         if next_pressed:
+            # Create experiment record for non-practice mode
+            if not practice_mode:
+                experiment_id = session_manager.create_experiment_record(
+                    experiment_type="MTF_Clarity",
+                    use_ado=True,
+                    num_trials=20,
+                    num_practice_trials=0
+                )
+                if experiment_id:
+                    logger.info(f"✅ Experiment record created: {experiment_id}")
+                else:
+                    logger.warning("⚠️ Failed to create experiment record, continuing with CSV-only storage")
+            
             session_manager.set_experiment_stage('trial')
             logger.info(f"Starting experiment - Practice mode: {practice_mode}")
             st.rerun()

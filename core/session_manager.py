@@ -40,6 +40,7 @@ class SessionStateManager:
             'trial_results': [],
             'saved_trials': 0,
             'experiment_completed': False,
+            'experiment_id': None,
             
             # Manager states
             'managers_initialized': False,
@@ -137,23 +138,86 @@ class SessionStateManager:
         return st.session_state.participant_id
     
     def set_participant_id(self, participant_id: str):
-        """Set participant ID"""
+        """Set participant ID and initialize participant records"""
         st.session_state.participant_id = participant_id
         logger.info(f"Participant ID set: {participant_id}")
+        
+        # Initialize CSV participant record
+        csv_manager = self.get_csv_manager()
+        if csv_manager:
+            try:
+                csv_manager.create_participant_record(
+                    participant_id, 
+                    {"experiment_type": "MTF Clarity Testing"}
+                )
+                logger.info(f"✅ CSV participant record created for: {participant_id}")
+            except Exception as e:
+                logger.error(f"❌ Failed to create CSV participant record: {e}")
+        
+        # Initialize database participant record
+        db_manager = self.get_db_manager()
+        if db_manager and self.is_db_manager_initialized():
+            try:
+                db_manager.create_participant(participant_id)
+                logger.info(f"✅ Database participant record created for: {participant_id}")
+            except Exception as e:
+                logger.error(f"❌ Failed to create database participant record: {e}")
     
     def clear_participant_data(self):
         """Clear all participant-specific data"""
         keys_to_clear = [
             'participant_id', 'current_trial', 'trial_results', 
             'saved_trials', 'experiment_completed', 'mtf_trial_data',
-            'mtf_response_pending', 'practice_trials_completed'
+            'mtf_response_pending', 'practice_trials_completed', 'experiment_id'
         ]
         
         for key in keys_to_clear:
             if key in st.session_state:
-                st.session_state[key] = None if key == 'participant_id' else 0 if 'trial' in key else False
+                st.session_state[key] = None if key in ['participant_id', 'experiment_id'] else 0 if 'trial' in key else False
         
         logger.info("Participant data cleared")
+    
+    # Experiment ID management
+    def get_experiment_id(self) -> Optional[int]:
+        """Get experiment ID"""
+        return st.session_state.experiment_id
+    
+    def set_experiment_id(self, experiment_id: int):
+        """Set experiment ID"""
+        st.session_state.experiment_id = experiment_id
+        logger.info(f"Experiment ID set: {experiment_id}")
+    
+    def create_experiment_record(self, experiment_type: str = "MTF_Clarity", **kwargs):
+        """Create experiment record in database"""
+        db_manager = self.get_db_manager()
+        participant_id = self.get_participant_id()
+        
+        if not db_manager or not participant_id:
+            logger.warning("Cannot create experiment record: missing database manager or participant ID")
+            return None
+        
+        try:
+            experiment_id = db_manager.create_experiment(
+                participant_id=participant_id,
+                experiment_type=experiment_type,
+                use_ado=kwargs.get('use_ado', True),
+                num_trials=kwargs.get('num_trials', 20),
+                num_practice_trials=kwargs.get('num_practice_trials', 0),
+                stimulus_duration=kwargs.get('stimulus_duration', 1.0),
+                inter_trial_interval=kwargs.get('inter_trial_interval', 0.5)
+            )
+            
+            if experiment_id:
+                self.set_experiment_id(experiment_id)
+                logger.info(f"✅ Experiment record created with ID: {experiment_id}")
+                return experiment_id
+            else:
+                logger.error("❌ Failed to create experiment record")
+                return None
+                
+        except Exception as e:
+            logger.error(f"❌ Error creating experiment record: {e}")
+            return None
     
     # Trial management
     def get_current_trial(self) -> int:
