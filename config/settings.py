@@ -29,7 +29,7 @@ def detect_environment():
 def get_page_config():
     """Get Streamlit page configuration"""
     return {
-        "page_title": "Psychophysics 2AFC Experiment",
+        "page_title": "心理物理學 2AFC 實驗",
         "page_icon": "🧠",
         "layout": "wide",
         "initial_sidebar_state": "collapsed"

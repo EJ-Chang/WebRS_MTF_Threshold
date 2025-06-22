@@ -20,8 +20,8 @@ def display_welcome_screen(session_manager) -> None:
         session_manager: SessionStateManager instance
     """
     try:
-        st.title("🧠 MTF Clarity Testing Experiment")
-        st.markdown("*Refactored Version - Modular Architecture*")
+        st.title("🧠 MTF 清晰度測試實驗")
+        st.markdown("*重構版本 - 模組化架構*")
         st.markdown("---")
 
         # Add performance testing option
@@ -30,8 +30,8 @@ def display_welcome_screen(session_manager) -> None:
             session_manager.set_experiment_stage('benchmark')
             st.rerun()
         st.write("""
-        This is an MTF (Modulation Transfer Function) clarity testing experiment using Adaptive Design Optimization (ADO). 
-        You will view images with varying levels of clarity and make judgments about their sharpness.
+        這是一個使用適應性設計優化 (ADO) 技術的 MTF (調制轉變函數) 清晰度測試實驗。
+        您將觀看不同清晰度的圖像，並對其銳利度進行判斷。
         """)
 
         _display_instructions()
@@ -40,13 +40,13 @@ def display_welcome_screen(session_manager) -> None:
 
         # Participant ID input
         participant_id = st.text_input(
-            "Enter Participant ID:",
+            "輸入參與者ID：",
             value="",
-            help="Enter a unique identifier (e.g., your initials + date)"
+            help="請輸入受測者ID（例如：名字縮寫 + 日期）"
         )
 
         # Stimulus image selection
-        st.subheader("Stimulus Image Selection")
+        st.subheader("刺激圖像選擇")
         _display_stimulus_selection()
 
         st.markdown("---")
@@ -61,7 +61,7 @@ def display_welcome_screen(session_manager) -> None:
         _display_ado_info()
 
         # Start experiment button
-        if create_action_button("Start MTF Experiment", key="start_mtf_experiment"):
+        if create_action_button("開始 MTF 實驗", key="start_mtf_experiment"):
             if _validate_experiment_setup(participant_id):
                 _initialize_experiment(session_manager, participant_id, config, show_trial_feedback)
 
@@ -72,16 +72,16 @@ def display_welcome_screen(session_manager) -> None:
         
     except Exception as e:
         logger.error(f"Error in welcome screen: {e}")
-        st.error(f"Error displaying welcome screen: {e}")
+        st.error(f"顯示歡迎畫面時發生錯誤：{e}")
 
 def _display_instructions() -> None:
     """Display experiment instructions"""
-    st.subheader("Instructions:")
+    st.subheader("實驗說明：")
     st.write("""
-    1. **Setup**: Enter your participant ID and configure the experiment parameters
-    2. **Practice**: Complete a few practice trials to familiarize yourself with the task
-    3. **Main Experiment**: Respond to image clarity questions - the experiment adapts based on your responses
-    4. **Completion**: Your data will be automatically saved to the database
+    1. **設定**：輸入您的參與者ID並設定實驗參數
+    2. **練習**：完成幾個練習試驗以熟悉任務
+    3. **正式實驗**：回答圖像清晰度問題 - 實驗會根據您的回應進行調整
+    4. **完成**：您的數據將自動儲存到資料庫
     """)
 
 def _display_stimulus_selection() -> None:
@@ -92,15 +92,15 @@ def _display_stimulus_selection() -> None:
         available_images = _get_available_images(stimuli_dir)
 
         if available_images:
-            st.write("Select the stimulus image for your experiment:")
+            st.write("請選擇實驗使用的刺激圖像：")
             _display_image_grid(available_images)
             _show_current_selection()
         else:
-            st.warning("No stimulus images found in stimuli_preparation folder")
+            st.warning("在 stimuli_preparation 資料夾中找不到刺激圖像")
             
     except Exception as e:
         logger.error(f"Error in stimulus selection: {e}")
-        st.error("Error loading stimulus images")
+        st.error("載入刺激圖像時發生錯誤")
 
 def _get_available_images(stimuli_dir: str) -> List[Tuple[str, str]]:
     """Get list of available stimulus images"""
@@ -119,10 +119,10 @@ def _display_image_grid(available_images: List[Tuple[str, str]]) -> None:
     cols = st.columns(len(available_images))
 
     caption_map = {
-        'stimuli_img.png': 'Original Stimulus',
-        'text_img.png': 'Text Image',
-        'tw_newsimg.png': 'Taiwan News',
-        'us_newsimg.png': 'US News'
+        'stimuli_img.png': '原始刺激圖',
+        'text_img.png': '文字圖像',
+        'tw_newsimg.png': '台灣新聞',
+        'us_newsimg.png': '美國新聞'
     }
 
     for i, (img_name, img_path) in enumerate(available_images):
@@ -143,41 +143,41 @@ def _display_image_grid(available_images: List[Tuple[str, str]]) -> None:
                 st.image(img_resized, caption=display_name, width=new_width)
                 st.caption(f"Size: {original_width}×{original_height}")
                 
-                if st.button(f"Select {display_name}", key=f"select_{img_name}"):
+                if st.button(f"選擇 {display_name}", key=f"select_{img_name}"):
                     st.session_state.selected_stimulus_image = img_path
                     st.rerun()
                     
             except Exception as e:
                 logger.error(f"Error loading {img_name}: {e}")
-                st.error(f"Error loading {img_name}: {e}")
+                st.error(f"載入 {img_name} 時發生錯誤: {e}")
 
 def _show_current_selection() -> None:
     """Show currently selected stimulus image"""
     if 'selected_stimulus_image' in st.session_state:
         selected_filename = os.path.basename(st.session_state.selected_stimulus_image)
         caption_map = {
-            'stimuli_img.png': 'Original Stimulus',
-            'text_img.png': 'Text Image',
-            'tw_newsimg.png': 'Taiwan News',
-            'us_newsimg.png': 'US News'
+            'stimuli_img.png': '原始刺激圖',
+            'text_img.png': '文字圖像',
+            'tw_newsimg.png': '台灣新聞',
+            'us_newsimg.png': '美國新聞'
         }
         selected_name = caption_map.get(selected_filename, selected_filename.replace('.png', ''))
-        st.success(f"✅ Selected stimulus: **{selected_name}**")
+        st.success(f"✅ 已選擇刺激圖像： **{selected_name}**")
     else:
-        st.info("👆 Please select a stimulus image above")
+        st.info("👆 請在上方選擇一個刺激圖像")
 
 def _display_experiment_configuration() -> dict:
     """Display experiment configuration options"""
-    st.subheader("Experiment Configuration")
+    st.subheader("實驗配置")
     
     col1, col2 = st.columns(2)
     with col1:
-        max_trials = st.slider("Maximum trials:", 20, 100, 50)
-        min_trials = st.slider("Minimum trials:", 10, 30, 15)
+        max_trials = st.slider("最大試驗次數：", 20, 100, 50)
+        min_trials = st.slider("最小試驗次數：", 10, 30, 15)
 
     with col2:
-        convergence_threshold = st.slider("Convergence threshold:", 0.05, 0.3, 0.15, 0.01)
-        stimulus_duration = st.slider("Stimulus duration (seconds):", 0.5, 5.0, 1.0, 0.1)
+        convergence_threshold = st.slider("收斂值：", 0.05, 0.3, 0.15, 0.01)
+        stimulus_duration = st.slider("刺激持續時間（秒）：", 0.5, 5.0, 1.0, 0.1)
     
     return {
         'max_trials': max_trials,
@@ -188,25 +188,25 @@ def _display_experiment_configuration() -> dict:
 
 def _display_display_options() -> bool:
     """Display display options"""
-    st.subheader("Display Options")
+    st.subheader("顯示選項")
     return st.checkbox(
-        "Show trial feedback (ADO results after each response)",
-        value=True,
-        help="If unchecked, experiment will proceed directly to next trial after response"
+        "顯示試驗回饋（每次回應後顯示 ADO 結果）",
+        value=False,
+        help="如果不勾選，實驗將在回應後直接進行下一個試驗"
     )
 
 def _display_ado_info() -> None:
     """Display ADO configuration information"""
-    st.subheader("Adaptive Design Optimization (ADO)")
-    st.info("ADO is enabled by default and will intelligently select MTF values to efficiently estimate your clarity perception threshold")
+    st.subheader("適應性設計優化 (ADO)")
+    st.info("ADO 預設啟用，將自動選擇 MTF 值以高效率推算您的清晰度知覺閾值")
 
 def _validate_experiment_setup(participant_id: str) -> bool:
     """Validate experiment setup"""
     if not participant_id.strip():
-        st.error("Please enter a valid Participant ID")
+        st.error("請輸入有效的參與者ID")
         return False
     elif 'selected_stimulus_image' not in st.session_state:
-        st.error("Please select a stimulus image")
+        st.error("請選擇一個刺激圖像")
         return False
     return True
 
@@ -216,6 +216,9 @@ def _initialize_experiment(session_manager, participant_id: str, config: dict, s
         session_manager.set_participant_id(participant_id.strip())
         st.session_state.experiment_type = "MTF Clarity Testing"
 
+        # Set total trials in session manager to match user configuration
+        session_manager.set_total_trials(config['max_trials'])
+        
         # Initialize MTF experiment manager
         st.session_state.mtf_experiment_manager = MTFExperimentManager(
             max_trials=config['max_trials'],
@@ -228,6 +231,7 @@ def _initialize_experiment(session_manager, participant_id: str, config: dict, s
         st.session_state.stimulus_duration = config['stimulus_duration']
         session_manager.set_show_trial_feedback(show_trial_feedback)
         
+        logger.info(f"🔧 Trial configuration: max_trials={config['max_trials']}, min_trials={config['min_trials']}")
         logger.info(f"🔧 Trial feedback setting saved: {show_trial_feedback}")
         
         session_manager.set_experiment_stage('instructions')
@@ -235,17 +239,17 @@ def _initialize_experiment(session_manager, participant_id: str, config: dict, s
         
     except Exception as e:
         logger.error(f"Error initializing experiment: {e}")
-        st.error(f"Error initializing experiment: {e}")
+        st.error(f"初始化實驗時發生錯誤： {e}")
 
 def _display_data_analysis_section() -> None:
     """Display data analysis section for previous experiments"""
-    st.subheader("📊 Analyze Previous Data")
-    st.markdown("Upload CSV data from a previous experiment to visualize the psychometric function:")
+    st.subheader("📊 分析過去數據")
+    st.markdown("上傳之前實驗的 CSV 數據以繪製心理計量函數：")
 
     uploaded_file = st.file_uploader(
-        "Choose CSV file", 
+        "選擇 CSV 檔案", 
         type=['csv'],
-        help="Upload a CSV file from a previous experiment to analyze"
+        help="上傳過去實驗的 CSV 檔案進行分析"
     )
 
     if uploaded_file is not None:
@@ -257,13 +261,13 @@ def _analyze_uploaded_data(uploaded_file) -> None:
         # Read the uploaded CSV
         df = pd.read_csv(uploaded_file)
         
-        st.success(f"Data loaded successfully! Found {len(df)} trials.")
+        st.success(f"數據載入成功！找到 {len(df)} 個試驗。")
         
         # Show data preview
-        with st.expander("Data Preview"):
+        with st.expander("數據預覽"):
             st.dataframe(df.head(10))
-            st.write("**Columns found:**", list(df.columns))
-            st.write("**Data types:**")
+            st.write("**找到的欄位：**", list(df.columns))
+            st.write("**數據類型：**")
             for col in df.columns:
                 st.write(f"- {col}: {df[col].dtype}")
 
@@ -271,8 +275,8 @@ def _analyze_uploaded_data(uploaded_file) -> None:
         trial_data = df.to_dict('records')
         
         # Generate psychometric function
-        st.subheader("Psychometric Function from Uploaded Data")
-        from app import plot_psychometric_function  # Import here to avoid circular import
+        st.subheader("上傳數據的心理計量函數")
+        from utils.analysis_tools import plot_psychometric_function
         plot_psychometric_function(trial_data)
         
         # Show stimulus info
@@ -283,7 +287,7 @@ def _analyze_uploaded_data(uploaded_file) -> None:
         
     except Exception as e:
         logger.error(f"Error analyzing uploaded data: {e}")
-        st.error(f"Error reading file: {str(e)}")
+        st.error(f"讀取檔案時發生錯誤： {str(e)}")
         _show_expected_format()
 
 def _show_stimulus_info(df: pd.DataFrame) -> None:
@@ -292,11 +296,11 @@ def _show_stimulus_info(df: pd.DataFrame) -> None:
         stimulus_files = df['stimulus_image_file'].dropna().unique()
         if len(stimulus_files) > 0:
             caption_map = {
-                'stimuli_img.png': 'Original Stimulus',
-                'text_img.png': 'Text Image',
-                'tw_newsimg.png': 'Taiwan News',
-                'us_newsimg.png': 'US News',
-                'test_pattern': 'Test Pattern'
+                'stimuli_img.png': '原始刺激圖',
+                'text_img.png': '文字圖像',
+                'tw_newsimg.png': '台灣新聞',
+                'us_newsimg.png': '美國新聞',
+                'test_pattern': '測試圖案'
             }
             
             stimulus_info = []
@@ -304,30 +308,30 @@ def _show_stimulus_info(df: pd.DataFrame) -> None:
                 display_name = caption_map.get(file, file)
                 stimulus_info.append(f"**{display_name}** ({file})")
             
-            st.info(f"📸 Stimulus images used: {', '.join(stimulus_info)}")
+            st.info(f"📸 使用的刺激圖像： {', '.join(stimulus_info)}")
 
 def _show_summary_statistics(df: pd.DataFrame) -> None:
     """Show summary statistics"""
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Total Trials", len(df))
+        st.metric("總試驗次數", len(df))
     
     with col2:
         if 'response' in df.columns:
             clear_rate = (df['response'] == 'clear').mean()
-            st.metric("Overall Clear Rate", f"{clear_rate:.1%}")
+            st.metric("整體清晰率", f"{clear_rate:.1%}")
     
     with col3:
         if 'reaction_time' in df.columns:
             avg_rt = df['reaction_time'].mean()
-            st.metric("Average RT", f"{avg_rt:.2f}s")
+            st.metric("平均反應時間", f"{avg_rt:.2f}s")
 
 def _show_expected_format() -> None:
     """Show expected CSV format"""
-    st.info("Please make sure the CSV file has the correct format with columns like 'mtf_value', 'response', 'reaction_time', etc.")
+    st.info("請確定 CSV 檔案具有正確的格式，包含 'mtf_value'、'response'、'reaction_time' 等欄位。")
     
-    with st.expander("Expected CSV Format"):
+    with st.expander("預期的 CSV 格式"):
         sample_data = {
             'trial_number': [1, 2, 3],
             'mtf_value': [45.5, 67.8, 52.3],
