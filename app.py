@@ -17,6 +17,7 @@ import base64
 from io import BytesIO
 import os
 
+# 2025 06 22 ready to refactor
 # 環境檢測：根據不同環境設定不同端口
 def detect_environment():
     """檢測當前運行環境並設定相應的端口"""
