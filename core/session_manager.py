@@ -5,7 +5,7 @@ Centralized management of all Streamlit session state variables.
 import streamlit as st
 from typing import Any, Optional, Dict, List
 from csv_data_manager import CSVDataManager
-from database import DatabaseManager
+from database_manager import DatabaseManager
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
