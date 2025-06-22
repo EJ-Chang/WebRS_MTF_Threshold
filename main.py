@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Replit Entry Point for MTF Psychophysics Experiment Platform
-Main entry point that ensures proper environment setup for Replit hosting
+Legacy entry point - Use run.py for Replit deployment
+This file is maintained for compatibility but run.py is preferred
 """
 
 import os
