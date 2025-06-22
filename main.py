@@ -82,6 +82,26 @@ def setup_database():
         print(f"⚠️ Database setup warning: {e}")
         print("🔄 Application will continue with fallback storage")
 
+def kill_existing_process_on_port(port):
+    """Kill any existing process on the specified port"""
+    try:
+        result = subprocess.run(['lsof', '-ti', f':{port}'], 
+                              capture_output=True, text=True)
+        if result.stdout.strip():
+            pids = result.stdout.strip().split('\n')
+            for pid in pids:
+                try:
+                    subprocess.run(['kill', '-9', pid], check=True)
+                    print(f"✅ Killed process {pid} on port {port}")
+                except subprocess.CalledProcessError:
+                    pass
+    except FileNotFoundError:
+        # lsof not available, try netstat approach
+        try:
+            subprocess.run(['pkill', '-f', f'streamlit.*{port}'], check=False)
+        except FileNotFoundError:
+            pass
+
 def main():
     """Main entry point for Replit - only runs on Replit"""
     env = detect_environment()
@@ -101,6 +121,10 @@ def main():
 
     # Check dependencies
     check_dependencies()
+
+    # Kill any existing process on port 5000
+    print("🔍 Checking for existing processes on port 5000...")
+    kill_existing_process_on_port(5000)
 
     # Import and run the main application
     try:

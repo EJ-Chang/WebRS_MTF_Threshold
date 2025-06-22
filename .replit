@@ -4,7 +4,6 @@ modules = ["python-base-3.13", "postgresql-16"]
 
 [nix]
 channel = "unstable"
-packages = ["freetype", "glibcLocales", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "pkg-config", "tcl", "tk", "xsimd", "zlib"]
 
 [[ports]]
 localPort = 5000
@@ -16,3 +15,15 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "cloudrun"
+
+[workflows]
+runButton = "Run"
+
+[[workflows.workflow]]
+name = "Run"
+author = 36593104
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
