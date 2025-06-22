@@ -1,0 +1,26 @@
+# WebRS MTF Threshold Experiment Dependencies
+# Generated during refactoring process
+
+# Core dependencies
+streamlit>=1.46.0
+numpy>=2.3.0
+pandas>=2.3.0
+scipy>=1.15.3
+
+# Image processing
+opencv-python>=4.11.0.86
+pillow>=11.2.1
+
+# Data visualization
+plotly>=6.1.2
+
+# Database support
+sqlalchemy>=2.0.41
+psycopg2-binary>=2.9.10
+
+# Development and testing (optional)
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Additional utilities
+python-dateutil>=2.8.0
