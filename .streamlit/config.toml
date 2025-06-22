@@ -1,0 +1,15 @@
+[theme]
+# 主色調 (按鈕、連結等) - 適合的綠色
+primaryColor = "#4CAF50"
+
+# 背景色 - Streamlit 預設白色
+backgroundColor = "#ffffff"
+
+# 次要背景色 (側邊欄) - Streamlit 預設淺灰
+secondaryBackgroundColor = "#f0f2f6"
+
+# 文字顏色 - Streamlit 預設深色
+textColor = "#262730"
+
+# 字體
+font = "sans serif"
