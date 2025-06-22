@@ -1,4 +1,4 @@
-modules = ["python-3.13"]
+modules = ["python-3.12"]
 
 [nix.override]
 python = "python313"
@@ -44,7 +44,7 @@ NUMPY_EXPERIMENTAL_ARRAY_FUNCTION = "0"
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["python3.13", "-m", "streamlit", "run", "app.py", "--server.port", "5000"]
+run = ["streamlit", "run", "app.py", "--server.port", "5000"]
 
 [workflows]
 runButton = "Project"
@@ -64,7 +64,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python3.13 -m streamlit run app.py --server.port 5000"
+args = "python -m streamlit run app.py --server.port 5000 --server.address 0.0.0.0"
 waitForPort = 5000
 
 [[ports]]
