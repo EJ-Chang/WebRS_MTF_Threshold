@@ -1,4 +1,4 @@
-run = "python main.py"
+run = "uv run python main.py"
 entrypoint = "main.py"
 modules = ["python-base-3.13", "postgresql-16"]
 
@@ -32,9 +32,9 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python run.py"
+args = "uv run python run.py"
 waitForPort = 5000
 
 [deployment]
-run = ["sh", "-c", "streamlit run app.py --server.port=5000 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false"]
+run = ["sh", "-c", "uv run streamlit run app.py --server.port=5000 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false"]
 deploymentTarget = "cloudrun"
