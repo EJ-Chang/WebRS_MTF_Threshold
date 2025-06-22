@@ -184,7 +184,7 @@ def plot_psychometric_function(trial_data: List[Dict[str, Any]]) -> None:
         grouped = grouped[grouped['n_trials'] >= 1]
 
         if len(grouped) == 0:
-            st.warning("沒有足夠的數據點繪製心理測量函數")
+            st.warning("沒有足夠的數據點繪製心理計量函數")
             return
 
         # Prepare data for fitting
@@ -205,7 +205,7 @@ def plot_psychometric_function(trial_data: List[Dict[str, Any]]) -> None:
         
     except Exception as e:
         logger.error(f"Error plotting psychometric function: {e}")
-        st.error(f"繪製心理測量函數時發生錯誤: {e}")
+        st.error(f"繪製心理計量函數時發生錯誤: {e}")
 
 def _create_psychometric_plot_with_fits(grouped: pd.DataFrame, df: pd.DataFrame, fit_results: Dict[str, Any]) -> None:
     """Create the psychometric function plot with fitted curves"""
@@ -285,7 +285,7 @@ def _create_psychometric_plot_with_fits(grouped: pd.DataFrame, df: pd.DataFrame,
 
         # Update layout
         fig.update_layout(
-            title="心理測量函數 - MTF 清晰度判斷（含曲線擬合）",
+            title="心理計量函數 - MTF 清晰度判斷（含模型適配）",
             xaxis_title="MTF 值",
             yaxis_title="回應「清楚」的比例",
             xaxis=dict(range=[0, 99]),
@@ -307,17 +307,17 @@ def _create_psychometric_plot_with_fits(grouped: pd.DataFrame, df: pd.DataFrame,
         
     except Exception as e:
         logger.error(f"Error creating plot with fits: {e}")
-        st.error("繪製擬合曲線時發生錯誤")
+        st.error("繪製適配曲線時發生錯誤")
 
 def _show_fitting_results(fit_results: Dict[str, Any]) -> None:
     """Show psychometric function fitting results"""
     try:
-        st.subheader("🔬 心理測量函數擬合結果")
+        st.subheader("🔬 心理計量函數適配結果")
         
         successful_fits = [name for name, result in fit_results.items() if result['success']]
         
         if not successful_fits:
-            st.warning("⚠️ 曲線擬合失敗。可能需要更多數據點或數據範圍更廣。")
+            st.warning("⚠️ 模型適配失敗。可能需要更多數據點或數據範圍更廣。")
             return
         
         # Create columns for each successful fit
@@ -330,7 +330,7 @@ def _show_fitting_results(fit_results: Dict[str, Any]) -> None:
                     st.markdown("#### 📈 Logistic 模型")
                     st.metric("閾值 (α)", f"{result['params']['alpha']:.2f}")
                     st.metric("斜率 (β)", f"{result['params']['beta']:.2f}")
-                    st.metric("擬合度 (R²)", f"{result['r_squared']:.3f}")
+                    st.metric("適配度 (R²)", f"{result['r_squared']:.3f}")
                     
                     # Interpretation
                     if result['params']['beta'] < 5:
@@ -345,7 +345,7 @@ def _show_fitting_results(fit_results: Dict[str, Any]) -> None:
                     st.markdown("#### 📊 Gaussian 模型")
                     st.metric("閾值 (μ)", f"{result['params']['mu']:.2f}")
                     st.metric("標準差 (σ)", f"{result['params']['sigma']:.2f}")
-                    st.metric("擬合度 (R²)", f"{result['r_squared']:.3f}")
+                    st.metric("適配度 (R²)", f"{result['r_squared']:.3f}")
                     
                     # Interpretation
                     if result['params']['sigma'] < 5:
@@ -426,7 +426,7 @@ def _create_psychometric_plot(grouped: pd.DataFrame, df: pd.DataFrame) -> None:
 
         # Update layout
         fig.update_layout(
-            title="心理測量函數 - MTF 清晰度判斷",
+            title="心理計量函數 - MTF 清晰度判斷",
             xaxis_title="MTF 值",
             yaxis_title="回應「清楚」的比例",
             xaxis=dict(range=[0, 99]),
