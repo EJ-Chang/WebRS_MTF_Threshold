@@ -8,8 +8,8 @@ import streamlit as st
 from config.settings import detect_environment, PAGE_CONFIG
 from config.logging_config import setup_logging
 
-# Initialize logging
-setup_logging()
+# Initialize logging with reduced verbosity
+setup_logging(level='WARNING')
 
 # Detect environment
 environment = detect_environment()
