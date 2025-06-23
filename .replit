@@ -32,9 +32,9 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uv run python run.py"
+args = "uv sync && uv run python run.py"
 waitForPort = 5000
 
 [deployment]
-run = ["sh", "-c", "uv run streamlit run app.py --server.port=5000 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false"]
+run = ["sh", "-c", "uv sync && uv run streamlit run app.py --server.port=5000 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false"]
 deploymentTarget = "cloudrun"
