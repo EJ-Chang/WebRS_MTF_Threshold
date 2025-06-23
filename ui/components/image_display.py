@@ -89,10 +89,18 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
         img_id = f"mtf_img_{int(time.time() * 1000)}"
         final_h, final_w = processed_img.shape[:2]
 
-        # Simple CSS styling without responsive features
-        simple_style = """
+        # Fixed pixel size styling to prevent DPI scaling
+        simple_style = f"""
         display: block;
         margin: 0 auto;
+        width: {final_w}px !important;
+        height: {final_h}px !important;
+        image-rendering: pixelated;
+        zoom: 1;
+        -webkit-transform: scale(1);
+        -moz-transform: scale(1);
+        -ms-transform: scale(1);
+        transform: scale(1);
         """
 
         # Clean HTML for stimulus display with fixed sizing
