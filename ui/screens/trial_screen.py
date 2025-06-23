@@ -111,20 +111,15 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
         # Show fixation cross
         show_animated_fixation(phase_elapsed)
         
-        # Perform ADO computation during fixation if we have completed trials
-        # This should happen only once per fixation period
-        if ('ado_computation_done' not in st.session_state or 
-            not st.session_state.ado_computation_done):
-            _perform_ado_computation_during_fixation(session_manager, experiment_controller)
-            st.session_state.ado_computation_done = True
+        # ADO computation during fixation has been disabled to ensure timing accuracy
+        # If you need ADO computation, it can be re-enabled in future versions
         
         # Check if fixation period is over
         fixation_duration = session_manager.get_fixation_duration()
         if phase_elapsed >= fixation_duration:
             st.session_state.trial_phase = 'stimulus'
             st.session_state.phase_start_time = current_time
-            # Reset ADO computation flag for next trial
-            st.session_state.ado_computation_done = False
+            # ADO computation flag reset removed (ADO computation disabled)
             st.rerun()
         else:
             # Auto-refresh every 100ms to update animation

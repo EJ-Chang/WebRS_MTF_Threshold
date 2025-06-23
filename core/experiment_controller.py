@@ -375,100 +375,28 @@ class ExperimentController:
     
     def compute_next_stimulus_ado(self) -> Optional[float]:
         """
-        Compute next stimulus value using ADO algorithm during fixation period
+        ADO computation has been disabled to ensure timing accuracy.
+        This function now returns None to maintain interface compatibility.
         
         Returns:
-            Next stimulus value or None if computation fails
+            None (ADO computation disabled)
         """
-        try:
-            if 'mtf_experiment_manager' not in st.session_state:
-                logger.warning("No MTF experiment manager available for ADO computation")
-                return None
-            
-            exp_manager = st.session_state.mtf_experiment_manager
-            
-            # Check if the experiment manager has ADO computation capability
-            if hasattr(exp_manager, 'compute_next_stimulus'):
-                next_stimulus = exp_manager.compute_next_stimulus()
-                logger.debug(f"ADO computed next stimulus: {next_stimulus}")
-                return next_stimulus
-            elif hasattr(exp_manager, 'ado_engine') and exp_manager.ado_engine is not None:
-                # If ADO engine is available, use it directly
-                ado_engine = exp_manager.ado_engine
-                if hasattr(ado_engine, 'get_optimal_design'):
-                    next_stimulus = ado_engine.get_optimal_design()
-                    logger.debug(f"ADO engine computed next stimulus: {next_stimulus}")
-                    return next_stimulus
-                elif hasattr(ado_engine, 'get_next_design'):
-                    next_stimulus = ado_engine.get_next_design()
-                    logger.debug(f"ADO engine computed next stimulus: {next_stimulus}")
-                    return next_stimulus
-            
-            logger.warning("ADO computation not available in experiment manager")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error computing next stimulus with ADO: {e}")
-            return None
+        logger.debug("ADO computation disabled for timing accuracy")
+        return None
     
     def update_previous_trial_ado_value(self, ado_stimulus_value: float) -> bool:
         """
-        Update the ado_stimulus_value of the previous trial with computed value
+        ADO value update has been disabled to ensure timing accuracy.
+        This function now returns True to maintain interface compatibility.
         
         Args:
-            ado_stimulus_value: The computed ADO stimulus value for next trial
+            ado_stimulus_value: The computed ADO stimulus value (ignored)
             
         Returns:
-            True if update successful
+            True (ADO update disabled but interface maintained)
         """
-        try:
-            trial_results = self.session.get_trial_results()
-            if not trial_results:
-                logger.warning("No trial results available for ADO value update")
-                return False
-            
-            # Get the most recent trial (just completed)
-            last_trial = trial_results[-1]
-            trial_number = last_trial.get('trial_number')
-            participant_id = last_trial.get('participant_id')
-            
-            if not trial_number or not participant_id:
-                logger.error("Missing trial number or participant ID for ADO update")
-                return False
-            
-            # Update in session state
-            last_trial['ado_stimulus_value'] = ado_stimulus_value
-            logger.debug(f"Updated trial {trial_number} ado_stimulus_value to {ado_stimulus_value}")
-            
-            # Update in storage systems
-            update_success = False
-            
-            # Update in CSV
-            csv_manager = self.session.get_csv_manager()
-            if csv_manager and hasattr(csv_manager, 'update_trial_ado_value'):
-                try:
-                    csv_manager.update_trial_ado_value(participant_id, trial_number, ado_stimulus_value)
-                    update_success = True
-                    logger.debug("ADO value updated in CSV")
-                except Exception as e:
-                    logger.error(f"Failed to update ADO value in CSV: {e}")
-            
-            # Update in database
-            db_manager = self.session.get_db_manager()
-            experiment_id = self.session.get_experiment_id()
-            if db_manager and experiment_id and hasattr(db_manager, 'update_trial_ado_value'):
-                try:
-                    db_manager.update_trial_ado_value(experiment_id, trial_number, ado_stimulus_value)
-                    update_success = True
-                    logger.debug("ADO value updated in database")
-                except Exception as e:
-                    logger.error(f"Failed to update ADO value in database: {e}")
-            
-            return update_success
-            
-        except Exception as e:
-            logger.error(f"Error updating previous trial ADO value: {e}")
-            return False
+        logger.debug("ADO value update disabled for timing accuracy")
+        return True
 
     def get_experiment_progress(self) -> Dict[str, Any]:
         """
