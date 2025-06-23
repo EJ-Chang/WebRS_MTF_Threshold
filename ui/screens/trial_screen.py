@@ -65,6 +65,16 @@ def display_trial_screen(session_manager, experiment_controller) -> None:
         
         # Check if experiment is complete
         if experiment_controller.check_experiment_completion():
+            # Ensure any pending trial data is saved before completing
+            trial_results = session_manager.get_trial_results()
+            if trial_results and not session_manager.is_practice_mode():
+                latest_result = trial_results[-1]
+                # Check if the last trial hasn't been saved yet
+                saved_trials = session_manager.get_saved_trials()
+                if len(trial_results) > saved_trials:
+                    logger.info(f"Saving final trial data before experiment completion")
+                    experiment_controller.save_trial_data(latest_result)
+            
             experiment_controller.complete_experiment()
             session_manager.set_experiment_stage('results')
             st.rerun()
@@ -141,7 +151,7 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
             caption=f"MTF 值: {mtf_value:.1f}" if session_manager.get_show_trial_feedback() else ""
         )
         
-        # Response buttons
+        # Response buttons (restored to original horizontal layout)
         left_pressed, right_pressed = create_response_buttons(
             left_label="不清楚",
             right_label="清楚",

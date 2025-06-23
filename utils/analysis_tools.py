@@ -44,6 +44,50 @@ def cumulative_gaussian_psychometric(x, mu, sigma, gamma=0.0, lambda_=0.02):
     """
     return gamma + (1 - gamma - lambda_) * norm.cdf(x, loc=mu, scale=sigma)
 
+def calculate_threshold_75(params, model_type, gamma=0.0, lambda_=0.02):
+    """
+    Calculate 75% threshold for psychometric functions
+    
+    Args:
+        params: Model parameters (alpha, beta for logistic; mu, sigma for gaussian)
+        model_type: 'logistic' or 'gaussian'
+        gamma: Guess rate
+        lambda_: Lapse rate
+    
+    Returns:
+        75% threshold value
+    """
+    target_prob = 0.75
+    
+    if model_type == 'logistic':
+        alpha, beta = params['alpha'], params['beta']
+        # For logistic: solve for x when y = 0.75
+        # 0.75 = gamma + (1 - gamma - lambda) / (1 + exp(-(x - alpha) / beta))
+        # Rearranging: (0.75 - gamma) / (1 - gamma - lambda) = 1 / (1 + exp(-(x - alpha) / beta))
+        # Further: 1 + exp(-(x - alpha) / beta) = (1 - gamma - lambda) / (0.75 - gamma)
+        # So: exp(-(x - alpha) / beta) = (1 - gamma - lambda) / (0.75 - gamma) - 1
+        # Finally: x = alpha - beta * ln((1 - gamma - lambda) / (0.75 - gamma) - 1)
+        numerator = (1 - gamma - lambda_)
+        denominator = (target_prob - gamma)
+        if denominator > 0 and numerator > denominator:
+            ratio = numerator / denominator - 1
+            if ratio > 0:
+                threshold_75 = alpha - beta * np.log(ratio)
+                return threshold_75
+    
+    elif model_type == 'gaussian':
+        mu, sigma = params['mu'], params['sigma']
+        # For Gaussian: solve for x when y = 0.75
+        # 0.75 = gamma + (1 - gamma - lambda) * Φ((x - mu) / sigma)
+        # Rearranging: Φ^(-1)((0.75 - gamma) / (1 - gamma - lambda)) = (x - mu) / sigma
+        adjusted_prob = (target_prob - gamma) / (1 - gamma - lambda_)
+        if 0 < adjusted_prob < 1:
+            z_score = norm.ppf(adjusted_prob)
+            threshold_75 = mu + sigma * z_score
+            return threshold_75
+    
+    return None
+
 def fit_psychometric_functions(x_data: np.ndarray, y_data: np.ndarray) -> Dict[str, Any]:
     """
     Fit both logistic and cumulative Gaussian psychometric functions to data
@@ -256,32 +300,30 @@ def _create_psychometric_plot_with_fits(grouped: pd.DataFrame, df: pd.DataFrame,
                     hovertemplate=f'{model_label}<br>MTF: %{{x:.1f}}<br>P(清楚): %{{y:.3f}}<extra></extra>'
                 ))
 
-        # Add 50% threshold line
+        # Add 75% threshold line
         fig.add_hline(
-            y=0.5, 
+            y=0.75, 
             line_dash="dot", 
             line_color="gray", 
-            annotation_text="50% 閾值",
+            annotation_text="75% 閾值",
             annotation_position="top right"
         )
 
-        # Add threshold markers for successful fits
+        # Add threshold markers for successful fits (75% threshold)
         for model_name, result in fit_results.items():
             if result['success']:
-                if model_name == 'logistic':
-                    threshold = result['params']['alpha']
-                    model_label = 'Logistic'
-                else:
-                    threshold = result['params']['mu']
-                    model_label = 'Gaussian'
-                
-                fig.add_vline(
-                    x=threshold,
-                    line_dash="dot",
-                    line_color=colors[model_name],
-                    annotation_text=f"{model_label} 閾值: {threshold:.1f}",
-                    annotation_position="top"
-                )
+                threshold_75 = calculate_threshold_75(result['params'], model_name)
+                if threshold_75 is not None:
+                    model_label = 'Logistic' if model_name == 'logistic' else 'Gaussian'
+                    # Set different annotation positions to avoid overlap
+                    annotation_position = "top" if model_name == 'logistic' else "bottom"
+                    fig.add_vline(
+                        x=threshold_75,
+                        line_dash="dot",
+                        line_color=colors[model_name],
+                        annotation_text=f"{model_label} 75%閾值: {threshold_75:.1f}",
+                        annotation_position=annotation_position
+                    )
 
         # Update layout
         fig.update_layout(
@@ -326,9 +368,13 @@ def _show_fitting_results(fit_results: Dict[str, Any]) -> None:
         for i, model_name in enumerate(successful_fits):
             result = fit_results[model_name]
             with cols[i]:
+                # Calculate 75% threshold for display
+                threshold_75 = calculate_threshold_75(result['params'], model_name)
+                
                 if model_name == 'logistic':
                     st.markdown("#### 📈 Logistic 模型")
-                    st.metric("閾值 (α)", f"{result['params']['alpha']:.2f}")
+                    if threshold_75 is not None:
+                        st.metric("75%閾值", f"{threshold_75:.2f}")
                     st.metric("斜率 (β)", f"{result['params']['beta']:.2f}")
                     st.metric("適配度 (R²)", f"{result['r_squared']:.3f}")
                     
@@ -343,7 +389,8 @@ def _show_fitting_results(fit_results: Dict[str, Any]) -> None:
                     
                 else:  # gaussian
                     st.markdown("#### 📊 Gaussian 模型")
-                    st.metric("閾值 (μ)", f"{result['params']['mu']:.2f}")
+                    if threshold_75 is not None:
+                        st.metric("75%閾值", f"{threshold_75:.2f}")
                     st.metric("標準差 (σ)", f"{result['params']['sigma']:.2f}")
                     st.metric("適配度 (R²)", f"{result['r_squared']:.3f}")
                     
@@ -404,12 +451,12 @@ def _create_psychometric_plot(grouped: pd.DataFrame, df: pd.DataFrame) -> None:
             text=grouped['n_trials']
         ))
 
-        # Add 50% threshold line
+        # Add 75% threshold line
         fig.add_hline(
-            y=0.5, 
+            y=0.75, 
             line_dash="dash", 
             line_color="red", 
-            annotation_text="50% 閾值",
+            annotation_text="75% 閾值",
             annotation_position="top right"
         )
 
@@ -420,7 +467,7 @@ def _create_psychometric_plot(grouped: pd.DataFrame, df: pd.DataFrame) -> None:
                 x=threshold_estimate,
                 line_dash="dash",
                 line_color="orange",
-                annotation_text=f"估計閾值: {threshold_estimate:.1f}",
+                annotation_text=f"估計75%閾值: {threshold_estimate:.1f}",
                 annotation_position="top"
             )
 
@@ -444,7 +491,7 @@ def _create_psychometric_plot(grouped: pd.DataFrame, df: pd.DataFrame) -> None:
         st.error("繪製圖表時發生錯誤")
 
 def _estimate_threshold(grouped: pd.DataFrame) -> Optional[float]:
-    """Estimate the 50% threshold from the data"""
+    """Estimate the 75% threshold from the data"""
     try:
         if len(grouped) < 2:
             return None
@@ -452,13 +499,13 @@ def _estimate_threshold(grouped: pd.DataFrame) -> Optional[float]:
         # Sort by MTF value
         sorted_data = grouped.sort_values('mtf_value')
         
-        # Simple linear interpolation to find 50% point
+        # Simple linear interpolation to find 75% point
         x_vals = sorted_data['mtf_value'].values
         y_vals = sorted_data['prop_clear'].values
         
-        # Check if we have data points around 0.5
-        if y_vals.min() <= 0.5 <= y_vals.max():
-            threshold = np.interp(0.5, y_vals, x_vals)
+        # Check if we have data points around 0.75
+        if y_vals.min() <= 0.75 <= y_vals.max():
+            threshold = np.interp(0.75, y_vals, x_vals)
             return threshold
         else:
             # Extrapolate if needed
@@ -466,7 +513,7 @@ def _estimate_threshold(grouped: pd.DataFrame) -> Optional[float]:
                 # Use linear fit
                 slope, intercept = np.polyfit(x_vals, y_vals, 1)
                 if slope != 0:
-                    threshold = (0.5 - intercept) / slope
+                    threshold = (0.75 - intercept) / slope
                     return threshold
         
         return None
