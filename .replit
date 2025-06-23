@@ -8,10 +8,6 @@ packages = ["freetype", "glibcLocales", "lcms2", "libGL", "libGLU", "libimagequa
 
 [[ports]]
 localPort = 5000
-externalPort = 5000
-
-[[ports]]
-localPort = 8501
 externalPort = 80
 
 [workflows]
