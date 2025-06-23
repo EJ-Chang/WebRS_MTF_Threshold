@@ -159,12 +159,13 @@ class ExperimentController:
                 'trial_number': self.session.get_current_trial() + 1,
                 'participant_id': self.session.get_participant_id(),
                 'mtf_value': trial_data.get('mtf_value'),
-                'ado_stimulus_value': trial_data.get('mtf_value'),  # Same as mtf_value for ADO experiments
+                'ado_stimulus_value': trial_data.get('mtf_value'),  # Initial value, will be updated with next trial's ADO computation
                 'response': response,
                 'reaction_time': response_time,
                 'timestamp': datetime.now().isoformat(),
                 'is_practice': self.session.is_practice_mode(),
                 'experiment_type': st.session_state.get('experiment_type', 'MTF Clarity Testing'),
+                'max_trials': st.session_state.get('max_trials', self.session.get_total_trials()),  # Include user's max_trials setting
                 **ado_data  # Include all ADO computation results
             }
             
@@ -199,7 +200,7 @@ class ExperimentController:
     
     def save_trial_data(self, trial_result: Dict[str, Any]) -> bool:
         """
-        Save trial data to storage
+        Save trial data to storage (only for non-practice trials)
         
         Args:
             trial_result: Trial result dictionary
@@ -208,6 +209,11 @@ class ExperimentController:
             True if data saved successfully
         """
         try:
+            # Skip saving practice trials
+            if trial_result.get('is_practice', False):
+                logger.debug("Skipping save for practice trial")
+                return True  # Return True to indicate no error, just skipped
+            
             saved_successfully = False
             
             # Save to CSV
@@ -364,6 +370,99 @@ class ExperimentController:
             logger.error(f"Error resetting experiment: {e}")
             return False
     
+    def compute_next_stimulus_ado(self) -> Optional[float]:
+        """
+        Compute next stimulus value using ADO algorithm during fixation period
+        
+        Returns:
+            Next stimulus value or None if computation fails
+        """
+        try:
+            if 'mtf_experiment_manager' not in st.session_state:
+                logger.warning("No MTF experiment manager available for ADO computation")
+                return None
+            
+            exp_manager = st.session_state.mtf_experiment_manager
+            
+            # Check if the experiment manager has ADO computation capability
+            if hasattr(exp_manager, 'compute_next_stimulus'):
+                next_stimulus = exp_manager.compute_next_stimulus()
+                logger.debug(f"ADO computed next stimulus: {next_stimulus}")
+                return next_stimulus
+            elif hasattr(exp_manager, 'ado_engine'):
+                # If ADO engine is available, use it directly
+                ado_engine = exp_manager.ado_engine
+                if hasattr(ado_engine, 'get_next_design'):
+                    next_stimulus = ado_engine.get_next_design()
+                    logger.debug(f"ADO engine computed next stimulus: {next_stimulus}")
+                    return next_stimulus
+            
+            logger.warning("ADO computation not available in experiment manager")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error computing next stimulus with ADO: {e}")
+            return None
+    
+    def update_previous_trial_ado_value(self, ado_stimulus_value: float) -> bool:
+        """
+        Update the ado_stimulus_value of the previous trial with computed value
+        
+        Args:
+            ado_stimulus_value: The computed ADO stimulus value for next trial
+            
+        Returns:
+            True if update successful
+        """
+        try:
+            trial_results = self.session.get_trial_results()
+            if not trial_results:
+                logger.warning("No trial results available for ADO value update")
+                return False
+            
+            # Get the most recent trial (just completed)
+            last_trial = trial_results[-1]
+            trial_number = last_trial.get('trial_number')
+            participant_id = last_trial.get('participant_id')
+            
+            if not trial_number or not participant_id:
+                logger.error("Missing trial number or participant ID for ADO update")
+                return False
+            
+            # Update in session state
+            last_trial['ado_stimulus_value'] = ado_stimulus_value
+            logger.debug(f"Updated trial {trial_number} ado_stimulus_value to {ado_stimulus_value}")
+            
+            # Update in storage systems
+            update_success = False
+            
+            # Update in CSV
+            csv_manager = self.session.get_csv_manager()
+            if csv_manager and hasattr(csv_manager, 'update_trial_ado_value'):
+                try:
+                    csv_manager.update_trial_ado_value(participant_id, trial_number, ado_stimulus_value)
+                    update_success = True
+                    logger.debug("ADO value updated in CSV")
+                except Exception as e:
+                    logger.error(f"Failed to update ADO value in CSV: {e}")
+            
+            # Update in database
+            db_manager = self.session.get_db_manager()
+            experiment_id = self.session.get_experiment_id()
+            if db_manager and experiment_id and hasattr(db_manager, 'update_trial_ado_value'):
+                try:
+                    db_manager.update_trial_ado_value(experiment_id, trial_number, ado_stimulus_value)
+                    update_success = True
+                    logger.debug("ADO value updated in database")
+                except Exception as e:
+                    logger.error(f"Failed to update ADO value in database: {e}")
+            
+            return update_success
+            
+        except Exception as e:
+            logger.error(f"Error updating previous trial ADO value: {e}")
+            return False
+
     def get_experiment_progress(self) -> Dict[str, Any]:
         """
         Get current experiment progress

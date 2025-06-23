@@ -12,6 +12,41 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+def _perform_ado_computation_during_fixation(session_manager, experiment_controller):
+    """
+    Perform ADO computation during fixation period and update previous trial
+    
+    Args:
+        session_manager: SessionStateManager instance
+        experiment_controller: ExperimentController instance
+    """
+    try:
+        # Only perform ADO computation if we have completed at least one trial
+        trial_results = session_manager.get_trial_results()
+        if not trial_results:
+            logger.debug("No previous trials for ADO computation")
+            return
+        
+        # Skip ADO computation for practice trials
+        if session_manager.is_practice_mode():
+            logger.debug("Skipping ADO computation in practice mode")
+            return
+        
+        # Compute next stimulus value using ADO
+        next_stimulus_value = experiment_controller.compute_next_stimulus_ado()
+        if next_stimulus_value is not None:
+            # Update the previous trial's ado_stimulus_value with the computed value
+            success = experiment_controller.update_previous_trial_ado_value(next_stimulus_value)
+            if success:
+                logger.info(f"ADO computation completed: next stimulus = {next_stimulus_value:.2f}")
+            else:
+                logger.warning("Failed to update previous trial with ADO computation result")
+        else:
+            logger.warning("ADO computation returned no result")
+            
+    except Exception as e:
+        logger.error(f"Error during ADO computation in fixation: {e}")
+
 def display_trial_screen(session_manager, experiment_controller) -> None:
     """
     Display trial screen for MTF experiment
@@ -76,11 +111,20 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
         # Show fixation cross
         show_animated_fixation(phase_elapsed)
         
+        # Perform ADO computation during fixation if we have completed trials
+        # This should happen only once per fixation period
+        if ('ado_computation_done' not in st.session_state or 
+            not st.session_state.ado_computation_done):
+            _perform_ado_computation_during_fixation(session_manager, experiment_controller)
+            st.session_state.ado_computation_done = True
+        
         # Check if fixation period is over
         fixation_duration = session_manager.get_fixation_duration()
         if phase_elapsed >= fixation_duration:
             st.session_state.trial_phase = 'stimulus'
             st.session_state.phase_start_time = current_time
+            # Reset ADO computation flag for next trial
+            st.session_state.ado_computation_done = False
             st.rerun()
         else:
             # Auto-refresh every 100ms to update animation
@@ -116,11 +160,15 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
                 # Note: Practice trial counter is incremented in experiment_controller.process_response()
                 # No need to increment here to avoid double counting
                 
-                # Save trial data
+                # Save trial data (only for non-practice trials)
                 trial_results = session_manager.get_trial_results()
                 if trial_results:
                     latest_result = trial_results[-1]
-                    experiment_controller.save_trial_data(latest_result)
+                    # Only save if not in practice mode
+                    if not session_manager.is_practice_mode():
+                        experiment_controller.save_trial_data(latest_result)
+                    else:
+                        logger.debug("Practice trial - not saving data")
                 
                 # Show feedback if enabled
                 if session_manager.get_show_trial_feedback():
@@ -204,7 +252,7 @@ def _display_practice_completion(session_manager):
             st.rerun()
     
     st.markdown("---")
-    st.info("💡 **提示**: 練習模式的數據不會被記錄，正式實驗的數據將被保存")
+    st.info("💡 **提示**: 練習模式的數據不會被儲存到 CSV 檔案或資料庫，只有正式實驗的數據會被保存")
 
 def _display_ado_feedback(trial_data, session_manager):
     """Display ADO feedback information"""

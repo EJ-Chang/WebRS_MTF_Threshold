@@ -146,10 +146,15 @@ class SessionStateManager:
         csv_manager = self.get_csv_manager()
         if csv_manager:
             try:
-                csv_manager.create_participant_record(
-                    participant_id, 
-                    {"experiment_type": "MTF Clarity Testing"}
-                )
+                # Get experiment config from session state if available
+                experiment_config = {
+                    "experiment_type": "MTF Clarity Testing",
+                    "max_trials": st.session_state.get('max_trials', 50),
+                    "min_trials": st.session_state.get('min_trials', 15),
+                    "convergence_threshold": st.session_state.get('convergence_threshold', 0.15),
+                    "stimulus_duration": st.session_state.get('stimulus_duration', 1.0)
+                }
+                csv_manager.create_participant_record(participant_id, experiment_config)
                 logger.info(f"✅ CSV participant record created for: {participant_id}")
             except Exception as e:
                 logger.error(f"❌ Failed to create CSV participant record: {e}")
@@ -203,7 +208,10 @@ class SessionStateManager:
                 use_ado=kwargs.get('use_ado', True),
                 num_trials=kwargs.get('num_trials', st.session_state.get('total_trials', 50)),
                 num_practice_trials=kwargs.get('num_practice_trials', 0),
-                stimulus_duration=kwargs.get('stimulus_duration', 1.0),
+                max_trials=kwargs.get('max_trials', st.session_state.get('max_trials', 50)),
+                min_trials=kwargs.get('min_trials', st.session_state.get('min_trials', 15)),
+                convergence_threshold=kwargs.get('convergence_threshold', st.session_state.get('convergence_threshold', 0.15)),
+                stimulus_duration=kwargs.get('stimulus_duration', st.session_state.get('stimulus_duration', 1.0)),
                 inter_trial_interval=kwargs.get('inter_trial_interval', 0.5)
             )
             

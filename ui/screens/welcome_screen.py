@@ -213,9 +213,17 @@ def _validate_experiment_setup(participant_id: str) -> bool:
 def _initialize_experiment(session_manager, participant_id: str, config: dict, show_trial_feedback: bool) -> None:
     """Initialize experiment with given configuration"""
     try:
-        session_manager.set_participant_id(participant_id.strip())
+        # Store all settings in session state BEFORE setting participant ID
+        # This ensures the settings are available when creating participant records
+        st.session_state.max_trials = config['max_trials']
+        st.session_state.min_trials = config['min_trials']
+        st.session_state.convergence_threshold = config['convergence_threshold']
+        st.session_state.stimulus_duration = config['stimulus_duration']
         st.session_state.experiment_type = "MTF Clarity Testing"
-
+        
+        # Now set participant ID (this will use the correct settings above)
+        session_manager.set_participant_id(participant_id.strip())
+        
         # Set total trials in session manager to match user configuration
         session_manager.set_total_trials(config['max_trials'])
         
@@ -227,8 +235,6 @@ def _initialize_experiment(session_manager, participant_id: str, config: dict, s
             participant_id=session_manager.get_participant_id(),
             base_image_path=st.session_state.selected_stimulus_image
         )
-        
-        st.session_state.stimulus_duration = config['stimulus_duration']
         session_manager.set_show_trial_feedback(show_trial_feedback)
         
         logger.info(f"🔧 Trial configuration: max_trials={config['max_trials']}, min_trials={config['min_trials']}")

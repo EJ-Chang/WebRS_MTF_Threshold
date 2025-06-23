@@ -2,11 +2,14 @@
 Database models and operations for psychophysics experiments
 """
 import os
+import logging
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, Float, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -26,6 +29,9 @@ class Experiment(Base):
     use_ado = Column(Boolean, default=False)
     num_trials = Column(Integer)
     num_practice_trials = Column(Integer)
+    max_trials = Column(Integer)
+    min_trials = Column(Integer)
+    convergence_threshold = Column(Float)
     stimulus_duration = Column(Float)
     inter_trial_interval = Column(Float)
     started_at = Column(DateTime, default=datetime.now)
@@ -44,30 +50,23 @@ class Trial(Base):
     
     # Stimulus parameters
     mtf_value = Column(Float)  # For MTF experiments
-    ado_stimulus_value = Column(Float)  # ADO selected value
+    ado_stimulus_value = Column(Float)  # ADO selected value for next trial
     stimulus_image_file = Column(String)  # Record which image file was used
     
-    # ADO computation results
-    estimated_threshold = Column(Float)  # Current estimated threshold
-    estimated_slope = Column(Float)  # Current estimated slope
-    threshold_std = Column(Float)  # Threshold standard deviation
-    slope_std = Column(Float)  # Slope standard deviation
-    threshold_ci_lower = Column(Float)  # Threshold confidence interval lower bound
-    threshold_ci_upper = Column(Float)  # Threshold confidence interval upper bound
-    slope_ci_lower = Column(Float)  # Slope confidence interval lower bound
-    slope_ci_upper = Column(Float)  # Slope confidence interval upper bound
-    ado_entropy = Column(Float)  # ADO entropy measure
-    ado_trial_count = Column(Integer)  # Trial count for this ADO estimate
-    
     # Response data
-    response = Column(String)  # 'left', 'right', 'clear', 'not_clear'
+    response = Column(String)  # 'clear', 'not_clear'
     reaction_time = Column(Float)
     timestamp = Column(DateTime, default=datetime.now)
     
-    # Additional fields to match CSV format
-    participant_id = Column(String)  # Direct participant reference for easier querying
-    experiment_type = Column(String)  # 'MTF_Clarity', '2AFC', etc.
-    experiment_timestamp = Column(String)  # ISO format experiment start timestamp
+    # Essential trial info (for easy querying without joins)
+    participant_id = Column(String)  # Direct participant reference
+    experiment_type = Column(String)  # 'MTF_Clarity', etc.
+    
+    # ADO computation results (optional, for analysis)
+    estimated_threshold = Column(Float)  # Current estimated threshold
+    estimated_slope = Column(Float)  # Current estimated slope
+    threshold_std = Column(Float)  # Threshold uncertainty
+    slope_std = Column(Float)  # Slope uncertainty
     
     experiment = relationship("Experiment", back_populates="trials")
 
@@ -149,6 +148,9 @@ class DatabaseManager:
                 use_ado=kwargs.get('use_ado', False),
                 num_trials=kwargs.get('num_trials'),
                 num_practice_trials=kwargs.get('num_practice_trials'),
+                max_trials=kwargs.get('max_trials'),
+                min_trials=kwargs.get('min_trials'),
+                convergence_threshold=kwargs.get('convergence_threshold'),
                 stimulus_duration=kwargs.get('stimulus_duration'),
                 inter_trial_interval=kwargs.get('inter_trial_interval')
             )
@@ -173,51 +175,31 @@ class DatabaseManager:
                     return float(value) if 'float' in str(value.dtype) else int(value)
                 return value
             
-            # Ensure all CSV fields are properly mapped to database fields
+            # Map trial data to simplified database fields
             trial = Trial(
                 experiment_id=experiment_id,
                 trial_number=trial_data.get('trial_number'),
                 is_practice=trial_data.get('is_practice', False),
+                # Stimulus parameters
                 mtf_value=convert_numpy_value(trial_data.get('mtf_value')),
                 ado_stimulus_value=convert_numpy_value(trial_data.get('ado_stimulus_value')),
                 stimulus_image_file=trial_data.get('stimulus_image_file'),
-                # ADO computation results
-                estimated_threshold=convert_numpy_value(trial_data.get('estimated_threshold')),
-                estimated_slope=convert_numpy_value(trial_data.get('estimated_slope')),
-                threshold_std=convert_numpy_value(trial_data.get('threshold_std')),
-                slope_std=convert_numpy_value(trial_data.get('slope_std')),
-                threshold_ci_lower=convert_numpy_value(trial_data.get('threshold_ci_lower')),
-                threshold_ci_upper=convert_numpy_value(trial_data.get('threshold_ci_upper')),
-                slope_ci_lower=convert_numpy_value(trial_data.get('slope_ci_lower')),
-                slope_ci_upper=convert_numpy_value(trial_data.get('slope_ci_upper')),
-                ado_entropy=convert_numpy_value(trial_data.get('ado_entropy')),
-                ado_trial_count=convert_numpy_value(trial_data.get('ado_trial_count')),
                 # Response data
                 response=trial_data.get('response'),
                 reaction_time=convert_numpy_value(trial_data.get('reaction_time')),
                 timestamp=datetime.fromisoformat(trial_data.get('timestamp', datetime.now().isoformat())),
-                # New fields to match CSV format exactly
+                # Essential trial info (for easy querying)
                 participant_id=trial_data.get('participant_id'),
                 experiment_type=trial_data.get('experiment_type'),
-                experiment_timestamp=trial_data.get('experiment_timestamp')
+                # ADO computation results (optional)
+                estimated_threshold=convert_numpy_value(trial_data.get('estimated_threshold')),
+                estimated_slope=convert_numpy_value(trial_data.get('estimated_slope')),
+                threshold_std=convert_numpy_value(trial_data.get('threshold_std')),
+                slope_std=convert_numpy_value(trial_data.get('slope_std'))
             )
             session.add(trial)
             session.commit()
             
-            # Debug: Log what was saved vs what was in trial_data
-            print(f"🔧 Database trial saved with fields: {list(trial_data.keys())}")
-            db_fields = {
-                'experiment_id', 'trial_number', 'is_practice', 'mtf_value', 'ado_stimulus_value',
-                'stimulus_image_file', 'estimated_threshold', 'estimated_slope', 'threshold_std',
-                'slope_std', 'threshold_ci_lower', 'threshold_ci_upper', 'slope_ci_lower',
-                'slope_ci_upper', 'ado_entropy', 'ado_trial_count', 'response', 'reaction_time', 
-                'timestamp', 'participant_id', 'experiment_type', 'experiment_timestamp'
-            }
-            missing_in_db = set(trial_data.keys()) - db_fields
-            if missing_in_db:
-                print(f"⚠️ CSV fields not saved to database: {missing_in_db}")
-            else:
-                print("✅ All CSV fields successfully mapped to database")
             
             return trial.id
         finally:
@@ -252,32 +234,34 @@ class DatabaseManager:
                     'participant_id': experiment.participant_id,
                     'experiment_type': experiment.experiment_type,
                     'use_ado': experiment.use_ado,
+                    'num_trials': experiment.num_trials,
+                    'num_practice_trials': experiment.num_practice_trials,
+                    'max_trials': experiment.max_trials,
+                    'min_trials': experiment.min_trials,
+                    'convergence_threshold': experiment.convergence_threshold,
+                    'stimulus_duration': experiment.stimulus_duration,
+                    'inter_trial_interval': experiment.inter_trial_interval,
                     'started_at': experiment.started_at,
                     'completed_at': experiment.completed_at
                 },
                 'trials': [
                     {
+                        'participant_id': trial.participant_id,
                         'trial_number': trial.trial_number,
-                        'is_practice': trial.is_practice,
                         'mtf_value': trial.mtf_value,
                         'ado_stimulus_value': trial.ado_stimulus_value,
-                        'stimulus_image_file': trial.stimulus_image_file,
-                        'estimated_threshold': trial.estimated_threshold,
-                        'estimated_slope': trial.estimated_slope,
-                        'threshold_std': trial.threshold_std,
-                        'slope_std': trial.slope_std,
-                        'threshold_ci_lower': trial.threshold_ci_lower,
-                        'threshold_ci_upper': trial.threshold_ci_upper,
-                        'slope_ci_lower': trial.slope_ci_lower,
-                        'slope_ci_upper': trial.slope_ci_upper,
-                        'ado_entropy': trial.ado_entropy,
-                        'ado_trial_count': trial.ado_trial_count,
                         'response': trial.response,
                         'reaction_time': trial.reaction_time,
                         'timestamp': trial.timestamp,
-                        'participant_id': trial.participant_id,
                         'experiment_type': trial.experiment_type,
-                        'experiment_timestamp': trial.experiment_timestamp
+                        'stimulus_image_file': trial.stimulus_image_file,
+                        'max_trials': experiment.max_trials,  # From experiment level
+                        'is_practice': trial.is_practice,
+                        # ADO computation results (simplified)
+                        'estimated_threshold': trial.estimated_threshold,
+                        'estimated_slope': trial.estimated_slope,
+                        'threshold_std': trial.threshold_std,
+                        'slope_std': trial.slope_std
                     }
                     for trial in trials
                 ]
@@ -304,14 +288,57 @@ class DatabaseManager:
             session.close()
     
     def export_to_csv(self, experiment_id: int):
-        """Export experiment data to CSV format"""
+        """Export experiment data to CSV format with specified field order"""
         data = self.get_experiment_data(experiment_id)
         if not data:
             return None
         
+        # Define the required field order - only keep essential fields
+        required_fields = [
+            'participant_id', 'trial_number', 'mtf_value', 'ado_stimulus_value', 
+            'response', 'reaction_time', 'timestamp', 'experiment_type', 
+            'stimulus_image_file', 'max_trials'
+        ]
+        
+        # Create DataFrame with only required fields in specified order
         df = pd.DataFrame(data['trials'])
-        return df.to_csv(index=False)
+        
+        # Add max_trials from experiment data if not in trials
+        if 'max_trials' not in df.columns and data['experiment']['max_trials']:
+            df['max_trials'] = data['experiment']['max_trials']
+        
+        # Select and reorder columns
+        available_fields = [field for field in required_fields if field in df.columns]
+        df_ordered = df[available_fields]
+        
+        return df_ordered.to_csv(index=False)
     
+    def update_trial_ado_value(self, experiment_id: int, trial_number: int, ado_stimulus_value: float):
+        """Update the ado_stimulus_value for a specific trial"""
+        session = self.get_session()
+        try:
+            # Find the trial to update
+            trial = session.query(Trial).filter(
+                Trial.experiment_id == experiment_id,
+                Trial.trial_number == trial_number
+            ).first()
+            
+            if trial:
+                trial.ado_stimulus_value = ado_stimulus_value
+                session.commit()
+                logger.info(f"Updated trial {trial_number} ado_stimulus_value to {ado_stimulus_value}")
+                return True
+            else:
+                logger.warning(f"Trial {trial_number} not found in experiment {experiment_id}")
+                return False
+                
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error updating trial ADO value: {e}")
+            return False
+        finally:
+            session.close()
+
     def get_all_participants(self):
         """Get list of all participants"""
         session = self.get_session()

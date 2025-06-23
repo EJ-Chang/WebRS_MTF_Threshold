@@ -52,7 +52,12 @@ class CSVDataManager:
             'experiment_config': experiment_config,
             'status': 'started',
             'total_trials': 0,
-            'completed_trials': 0
+            'completed_trials': 0,
+            # Store settings for easy access
+            'max_trials': experiment_config.get('max_trials'),
+            'min_trials': experiment_config.get('min_trials'),
+            'convergence_threshold': experiment_config.get('convergence_threshold'),
+            'stimulus_duration': experiment_config.get('stimulus_duration')
         }
         
         with open(summary_path, 'w', encoding='utf-8') as f:
@@ -73,23 +78,41 @@ class CSVDataManager:
         if 'timestamp' not in trial_data:
             trial_data['timestamp'] = datetime.now().isoformat()
         
+        # Add experiment settings to trial data if not present
+        summary = self.get_experiment_summary(participant_id)
+        if summary:
+            for setting in ['max_trials', 'min_trials', 'convergence_threshold', 'stimulus_duration']:
+                if setting not in trial_data and setting in summary:
+                    trial_data[setting] = summary[setting]
+        
         # Convert numpy types to Python types
         cleaned_data = self._clean_trial_data(trial_data)
+        
+        # Define the required field orders - only keep essential fields
+        required_fields = [
+            'participant_id', 'trial_number', 'mtf_value', 'ado_stimulus_value', 
+            'response', 'reaction_time', 'timestamp', 'experiment_type', 
+            'stimulus_image_file', 'max_trials'
+        ]
+        
+        # Create ordered dictionary with only required fields
+        ordered_data = {}
+        for field in required_fields:
+            ordered_data[field] = cleaned_data.get(field, None)
         
         # Check if file exists to determine if we need headers
         file_exists = os.path.exists(file_path)
         
         # Write to CSV
         with open(file_path, 'a', newline='', encoding='utf-8') as csvfile:
-            if cleaned_data:
-                fieldnames = cleaned_data.keys()
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            if ordered_data:
+                writer = csv.DictWriter(csvfile, fieldnames=required_fields)
                 
                 # Write header if file is new
                 if not file_exists:
                     writer.writeheader()
                 
-                writer.writerow(cleaned_data)
+                writer.writerow(ordered_data)
         
         print(f"💾 Saved trial data for {participant_id}")
     
@@ -105,11 +128,24 @@ class CSVDataManager:
         
         file_path = self.get_participant_file_path(participant_id)
         
-        # Clean all trial data
-        cleaned_trials = [self._clean_trial_data(trial) for trial in trials_data]
+        # Define the required field orders - only keep essential fields
+        required_fields = [
+            'participant_id', 'trial_number', 'mtf_value', 'ado_stimulus_value', 
+            'response', 'reaction_time', 'timestamp', 'experiment_type', 
+            'stimulus_image_file', 'max_trials'
+        ]
         
-        # Create DataFrame and save
-        df = pd.DataFrame(cleaned_trials)
+        # Clean all trial data and keep only required fields in order
+        cleaned_trials = []
+        for trial in trials_data:
+            cleaned_data = self._clean_trial_data(trial)
+            ordered_data = {}
+            for field in required_fields:
+                ordered_data[field] = cleaned_data.get(field, None)
+            cleaned_trials.append(ordered_data)
+        
+        # Create DataFrame with specified column order and save
+        df = pd.DataFrame(cleaned_trials, columns=required_fields)
         df.to_csv(file_path, index=False, encoding='utf-8')
         
         print(f"💾 Saved {len(trials_data)} trials for {participant_id}")
@@ -226,6 +262,43 @@ class CSVDataManager:
         )
         
         print(f"✅ Experiment completed for {participant_id}")
+    
+    def update_trial_ado_value(self, participant_id: str, trial_number: int, ado_stimulus_value: float):
+        """Update the ado_stimulus_value for a specific trial
+        
+        Args:
+            participant_id: Participant identifier
+            trial_number: Trial number to update
+            ado_stimulus_value: New ADO stimulus value
+        """
+        file_path = self.get_participant_file_path(participant_id)
+        
+        if not os.path.exists(file_path):
+            print(f"❌ No data file found for participant {participant_id}")
+            return False
+        
+        try:
+            # Read existing data
+            df = pd.read_csv(file_path)
+            
+            # Find the trial to update
+            trial_mask = df['trial_number'] == trial_number
+            if not trial_mask.any():
+                print(f"❌ Trial {trial_number} not found for participant {participant_id}")
+                return False
+            
+            # Update the ado_stimulus_value
+            df.loc[trial_mask, 'ado_stimulus_value'] = ado_stimulus_value
+            
+            # Save the updated data back to CSV
+            df.to_csv(file_path, index=False, encoding='utf-8')
+            
+            print(f"✅ Updated trial {trial_number} ado_stimulus_value to {ado_stimulus_value} for {participant_id}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error updating trial ADO value: {e}")
+            return False
     
     def export_to_csv_string(self, participant_id: str) -> Optional[str]:
         """Export participant data as CSV string
