@@ -389,10 +389,14 @@ class ExperimentController:
                 next_stimulus = exp_manager.compute_next_stimulus()
                 logger.debug(f"ADO computed next stimulus: {next_stimulus}")
                 return next_stimulus
-            elif hasattr(exp_manager, 'ado_engine'):
+            elif hasattr(exp_manager, 'ado_engine') and exp_manager.ado_engine is not None:
                 # If ADO engine is available, use it directly
                 ado_engine = exp_manager.ado_engine
-                if hasattr(ado_engine, 'get_next_design'):
+                if hasattr(ado_engine, 'get_optimal_design'):
+                    next_stimulus = ado_engine.get_optimal_design()
+                    logger.debug(f"ADO engine computed next stimulus: {next_stimulus}")
+                    return next_stimulus
+                elif hasattr(ado_engine, 'get_next_design'):
                     next_stimulus = ado_engine.get_next_design()
                     logger.debug(f"ADO engine computed next stimulus: {next_stimulus}")
                     return next_stimulus
