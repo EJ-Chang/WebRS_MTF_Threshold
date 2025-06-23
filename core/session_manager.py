@@ -201,7 +201,7 @@ class SessionStateManager:
                 participant_id=participant_id,
                 experiment_type=experiment_type,
                 use_ado=kwargs.get('use_ado', True),
-                num_trials=kwargs.get('num_trials', 20),
+                num_trials=kwargs.get('num_trials', st.session_state.get('total_trials', 50)),
                 num_practice_trials=kwargs.get('num_practice_trials', 0),
                 stimulus_duration=kwargs.get('stimulus_duration', 1.0),
                 inter_trial_interval=kwargs.get('inter_trial_interval', 0.5)

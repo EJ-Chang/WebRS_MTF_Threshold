@@ -47,6 +47,18 @@ class Trial(Base):
     ado_stimulus_value = Column(Float)  # ADO selected value
     stimulus_image_file = Column(String)  # Record which image file was used
     
+    # ADO computation results
+    estimated_threshold = Column(Float)  # Current estimated threshold
+    estimated_slope = Column(Float)  # Current estimated slope
+    threshold_std = Column(Float)  # Threshold standard deviation
+    slope_std = Column(Float)  # Slope standard deviation
+    threshold_ci_lower = Column(Float)  # Threshold confidence interval lower bound
+    threshold_ci_upper = Column(Float)  # Threshold confidence interval upper bound
+    slope_ci_lower = Column(Float)  # Slope confidence interval lower bound
+    slope_ci_upper = Column(Float)  # Slope confidence interval upper bound
+    ado_entropy = Column(Float)  # ADO entropy measure
+    ado_trial_count = Column(Integer)  # Trial count for this ADO estimate
+    
     # Response data
     response = Column(String)  # 'left', 'right', 'clear', 'not_clear'
     reaction_time = Column(Float)
@@ -169,6 +181,18 @@ class DatabaseManager:
                 mtf_value=convert_numpy_value(trial_data.get('mtf_value')),
                 ado_stimulus_value=convert_numpy_value(trial_data.get('ado_stimulus_value')),
                 stimulus_image_file=trial_data.get('stimulus_image_file'),
+                # ADO computation results
+                estimated_threshold=convert_numpy_value(trial_data.get('estimated_threshold')),
+                estimated_slope=convert_numpy_value(trial_data.get('estimated_slope')),
+                threshold_std=convert_numpy_value(trial_data.get('threshold_std')),
+                slope_std=convert_numpy_value(trial_data.get('slope_std')),
+                threshold_ci_lower=convert_numpy_value(trial_data.get('threshold_ci_lower')),
+                threshold_ci_upper=convert_numpy_value(trial_data.get('threshold_ci_upper')),
+                slope_ci_lower=convert_numpy_value(trial_data.get('slope_ci_lower')),
+                slope_ci_upper=convert_numpy_value(trial_data.get('slope_ci_upper')),
+                ado_entropy=convert_numpy_value(trial_data.get('ado_entropy')),
+                ado_trial_count=convert_numpy_value(trial_data.get('ado_trial_count')),
+                # Response data
                 response=trial_data.get('response'),
                 reaction_time=convert_numpy_value(trial_data.get('reaction_time')),
                 timestamp=datetime.fromisoformat(trial_data.get('timestamp', datetime.now().isoformat())),
@@ -184,8 +208,10 @@ class DatabaseManager:
             print(f"🔧 Database trial saved with fields: {list(trial_data.keys())}")
             db_fields = {
                 'experiment_id', 'trial_number', 'is_practice', 'mtf_value', 'ado_stimulus_value',
-                'stimulus_image_file', 'response', 'reaction_time', 'timestamp',
-                'participant_id', 'experiment_type', 'experiment_timestamp'
+                'stimulus_image_file', 'estimated_threshold', 'estimated_slope', 'threshold_std',
+                'slope_std', 'threshold_ci_lower', 'threshold_ci_upper', 'slope_ci_lower',
+                'slope_ci_upper', 'ado_entropy', 'ado_trial_count', 'response', 'reaction_time', 
+                'timestamp', 'participant_id', 'experiment_type', 'experiment_timestamp'
             }
             missing_in_db = set(trial_data.keys()) - db_fields
             if missing_in_db:
@@ -236,6 +262,16 @@ class DatabaseManager:
                         'mtf_value': trial.mtf_value,
                         'ado_stimulus_value': trial.ado_stimulus_value,
                         'stimulus_image_file': trial.stimulus_image_file,
+                        'estimated_threshold': trial.estimated_threshold,
+                        'estimated_slope': trial.estimated_slope,
+                        'threshold_std': trial.threshold_std,
+                        'slope_std': trial.slope_std,
+                        'threshold_ci_lower': trial.threshold_ci_lower,
+                        'threshold_ci_upper': trial.threshold_ci_upper,
+                        'slope_ci_lower': trial.slope_ci_lower,
+                        'slope_ci_upper': trial.slope_ci_upper,
+                        'ado_entropy': trial.ado_entropy,
+                        'ado_trial_count': trial.ado_trial_count,
                         'response': trial.response,
                         'reaction_time': trial.reaction_time,
                         'timestamp': trial.timestamp,

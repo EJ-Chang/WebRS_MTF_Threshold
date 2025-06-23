@@ -106,16 +106,66 @@ class ExperimentController:
             if response_time is None and st.session_state.trial_start_time:
                 response_time = time.time() - st.session_state.trial_start_time
             
-            # Create trial result
+            # Get ADO estimates and statistics if available
+            ado_data = {}
+            if 'mtf_experiment_manager' in st.session_state:
+                exp_manager = st.session_state.mtf_experiment_manager
+                if hasattr(exp_manager, 'get_current_estimates'):
+                    estimates = exp_manager.get_current_estimates()
+                    ado_data.update({
+                        'estimated_threshold': estimates.get('threshold_mean'),
+                        'estimated_slope': estimates.get('slope_mean'),
+                        'threshold_std': estimates.get('threshold_sd'),
+                        'slope_std': estimates.get('slope_sd')
+                    })
+                    
+                    # Calculate confidence intervals (95% CI = mean ± 1.96 * std)
+                    if estimates.get('threshold_mean') is not None and estimates.get('threshold_sd') is not None:
+                        threshold_ci = 1.96 * estimates.get('threshold_sd', 0)
+                        ado_data.update({
+                            'threshold_ci_lower': estimates.get('threshold_mean', 0) - threshold_ci,
+                            'threshold_ci_upper': estimates.get('threshold_mean', 0) + threshold_ci
+                        })
+                    
+                    if estimates.get('slope_mean') is not None and estimates.get('slope_sd') is not None:
+                        slope_ci = 1.96 * estimates.get('slope_sd', 0)
+                        ado_data.update({
+                            'slope_ci_lower': estimates.get('slope_mean', 0) - slope_ci,
+                            'slope_ci_upper': estimates.get('slope_mean', 0) + slope_ci
+                        })
+                
+                # Get ADO entropy and trial count
+                if hasattr(exp_manager, 'get_ado_entropy'):
+                    ado_data['ado_entropy'] = exp_manager.get_ado_entropy()
+                
+                if hasattr(exp_manager, 'current_trial'):
+                    ado_data['ado_trial_count'] = exp_manager.current_trial
+                
+                # Get stimulus image file name
+                if hasattr(exp_manager, 'base_image_path') and exp_manager.base_image_path:
+                    if exp_manager.base_image_path == "test_pattern":
+                        ado_data['stimulus_image_file'] = "test_pattern"
+                    else:
+                        import os
+                        ado_data['stimulus_image_file'] = os.path.basename(exp_manager.base_image_path)
+                else:
+                    # Fallback: try to get from session state
+                    selected_image = st.session_state.get('selected_stimulus_image')
+                    if selected_image:
+                        ado_data['stimulus_image_file'] = selected_image
+            
+            # Create trial result with all ADO data
             trial_result = {
                 'trial_number': self.session.get_current_trial() + 1,
                 'participant_id': self.session.get_participant_id(),
                 'mtf_value': trial_data.get('mtf_value'),
+                'ado_stimulus_value': trial_data.get('mtf_value'),  # Same as mtf_value for ADO experiments
                 'response': response,
                 'reaction_time': response_time,
                 'timestamp': datetime.now().isoformat(),
                 'is_practice': self.session.is_practice_mode(),
-                'experiment_type': st.session_state.get('experiment_type', 'MTF Clarity Testing')
+                'experiment_type': st.session_state.get('experiment_type', 'MTF Clarity Testing'),
+                **ado_data  # Include all ADO computation results
             }
             
             # Add to session state
