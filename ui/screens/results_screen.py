@@ -7,6 +7,7 @@ from ui.components.progress_indicators import show_completion_celebration
 from ui.components.response_buttons import create_action_button, create_reset_button
 from utils.helpers import format_percentage, format_time_duration
 from utils.logger import get_logger
+from utils.analysis_tools import plot_psychometric_function
 
 logger = get_logger(__name__)
 
@@ -38,8 +39,8 @@ def display_results_screen(session_manager) -> None:
         # Display detailed results
         _display_detailed_results(trial_results)
         
-        # Display psychometric function if possible
-        _display_psychometric_function(trial_results)
+        # Display psychometric function using the proper analysis function
+        plot_psychometric_function(trial_results)
         
         # Download options
         _display_download_options(trial_results, session_manager.get_participant_id())
@@ -128,92 +129,6 @@ def _display_detailed_results(trial_results):
         else:
             st.warning("無法顯示詳細結果：缺少必要的數據欄位")
 
-def _display_psychometric_function(trial_results):
-    """Display psychometric function if possible"""
-    try:
-        import plotly.graph_objects as go
-        import numpy as np
-        
-        st.subheader("📈 心理測量函數")
-        
-        # Extract MTF values and responses
-        mtf_values = []
-        responses = []
-        
-        for result in trial_results:
-            mtf_val = result.get('mtf_value')
-            response = result.get('response')
-            
-            if mtf_val is not None and response is not None:
-                mtf_values.append(mtf_val)
-                responses.append(1 if response == 'clear' else 0)
-        
-        if len(mtf_values) < 5:
-            st.info("數據點不足，無法繪製心理測量函數（需要至少 5 個數據點）")
-            return
-        
-        # Create binned data for plotting
-        unique_mtf = sorted(set(mtf_values))
-        if len(unique_mtf) < 3:
-            st.info("MTF 值變化範圍太小，無法繪製有意義的心理測量函數")
-            return
-        
-        # Calculate proportion correct for each MTF value
-        mtf_bins = []
-        proportions = []
-        counts = []
-        
-        for mtf in unique_mtf:
-            indices = [i for i, x in enumerate(mtf_values) if x == mtf]
-            if indices:
-                responses_for_mtf = [responses[i] for i in indices]
-                proportion = sum(responses_for_mtf) / len(responses_for_mtf)
-                mtf_bins.append(mtf)
-                proportions.append(proportion)
-                counts.append(len(responses_for_mtf))
-        
-        # Create plot
-        fig = go.Figure()
-        
-        # Add data points
-        fig.add_trace(go.Scatter(
-            x=mtf_bins,
-            y=proportions,
-            mode='markers+lines',
-            marker=dict(size=8, color='blue'),
-            line=dict(color='blue', width=2),
-            name='觀察數據',
-            text=[f"n={count}" for count in counts],
-            hovertemplate='MTF: %{x:.1f}<br>清楚率: %{y:.1%}<br>%{text}<extra></extra>'
-        ))
-        
-        # Update layout
-        fig.update_layout(
-            title="心理測量函數",
-            xaxis_title="MTF 值",
-            yaxis_title="「清楚」回應比例",
-            yaxis=dict(range=[0, 1], tickformat='.0%'),
-            showlegend=True,
-            height=400
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Show interpretation
-        with st.expander("📖 結果解釋"):
-            st.markdown("""
-            **心理測量函數說明：**
-            - X 軸：MTF 值（調制傳遞函數值，越高表示圖像越清晰）
-            - Y 軸：回應「清楚」的比例
-            - 理想情況下，MTF 值越高，回應「清楚」的比例應該越高
-            - 函數的陡峭程度反映了您對清晰度變化的敏感性
-            """)
-        
-    except ImportError:
-        st.info("無法繪製心理測量函數：缺少 plotly 庫")
-    except Exception as e:
-        logger.warning(f"Error creating psychometric function: {e}")
-        st.warning("繪製心理測量函數時發生錯誤")
 
 def _display_download_options(trial_results, participant_id):
     """Display download options for results"""

@@ -125,6 +125,9 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
             # Auto-refresh every 100ms to update animation
             time.sleep(0.1)
             st.rerun()
+        
+        # Explicitly return to prevent any UI elements below from rendering during fixation
+        return
     
     elif st.session_state.trial_phase == 'stimulus':
         # Show stimulus image
