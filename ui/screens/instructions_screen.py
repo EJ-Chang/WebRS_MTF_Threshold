@@ -90,7 +90,10 @@ def display_instructions_screen(session_manager) -> None:
                 experiment_id = session_manager.create_experiment_record(
                     experiment_type="MTF_Clarity",
                     use_ado=True,
-                    num_trials=20,
+                    max_trials=st.session_state.get('max_trials', 50),
+                    min_trials=st.session_state.get('min_trials', 15),
+                    convergence_threshold=st.session_state.get('convergence_threshold', 0.15),
+                    stimulus_duration=st.session_state.get('stimulus_duration', 1.0),
                     num_practice_trials=0
                 )
                 if experiment_id:

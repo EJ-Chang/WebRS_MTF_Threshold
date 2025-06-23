@@ -48,6 +48,9 @@ class ExperimentController:
             # Set experiment type
             st.session_state.experiment_type = experiment_type
             
+            # Note: Database experiment record is created in instructions_screen.py
+            # when starting the experiment (for non-practice mode)
+            
             logger.info(f"Experiment started for participant: {self.session.get_participant_id()}")
             return True
             
