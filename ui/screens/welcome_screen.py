@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional
 from mtf_experiment import MTFExperimentManager
 from ui.components.response_buttons import create_action_button
 from utils.logger import get_logger
+from config.settings import MAX_TRIALS, MIN_TRIALS, CONVERGENCE_THRESHOLD, STIMULUS_DURATION
 
 logger = get_logger(__name__)
 
@@ -51,9 +52,6 @@ def display_welcome_screen(session_manager) -> None:
 
         st.markdown("---")
 
-        # Experiment configuration
-        config = _display_experiment_configuration()
-        
         # Display options
         show_trial_feedback = _display_display_options()
 
@@ -72,7 +70,7 @@ def display_welcome_screen(session_manager) -> None:
         with col2:
             if create_action_button("開始 MTF 實驗", key="start_mtf_experiment"):
                 if _validate_experiment_setup(participant_id):
-                    _initialize_experiment(session_manager, participant_id, config, show_trial_feedback)
+                    _initialize_experiment(session_manager, participant_id, show_trial_feedback)
 
         st.markdown("---")
 
@@ -175,25 +173,6 @@ def _show_current_selection() -> None:
     else:
         st.info("👆 請在上方選擇一個刺激圖像")
 
-def _display_experiment_configuration() -> dict:
-    """Display experiment configuration options"""
-    st.subheader("實驗配置")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        max_trials = st.slider("最大試驗次數：", 3, 60, 45)
-        min_trials = st.slider("最小試驗次數：", 2, 30, 15)
-
-    with col2:
-        convergence_threshold = st.slider("收斂值：", 0.05, 0.3, 0.15, 0.01)
-        stimulus_duration = st.slider("刺激持續時間（秒）：", 0.5, 5.0, 1.0, 0.1)
-    
-    return {
-        'max_trials': max_trials,
-        'min_trials': min_trials,
-        'convergence_threshold': convergence_threshold,
-        'stimulus_duration': stimulus_duration
-    }
 
 def _display_display_options() -> bool:
     """Display display options"""
@@ -226,22 +205,22 @@ def _validate_stimuli_preview_setup() -> bool:
         return False
     return True
 
-def _initialize_experiment(session_manager, participant_id: str, config: dict, show_trial_feedback: bool) -> None:
-    """Initialize experiment with given configuration"""
+def _initialize_experiment(session_manager, participant_id: str, show_trial_feedback: bool) -> None:
+    """Initialize experiment with configuration from settings"""
     try:
         # Store all settings in session state BEFORE setting participant ID
         # This ensures the settings are available when creating participant records
-        st.session_state.max_trials = config['max_trials']
-        st.session_state.min_trials = config['min_trials']
-        st.session_state.convergence_threshold = config['convergence_threshold']
-        st.session_state.stimulus_duration = config['stimulus_duration']
+        st.session_state.max_trials = MAX_TRIALS
+        st.session_state.min_trials = MIN_TRIALS
+        st.session_state.convergence_threshold = CONVERGENCE_THRESHOLD
+        st.session_state.stimulus_duration = STIMULUS_DURATION
         st.session_state.experiment_type = "MTF Clarity Testing"
         
         # Now set participant ID (this will use the correct settings above)
         session_manager.set_participant_id(participant_id.strip())
         
-        # Set total trials in session manager to match user configuration
-        session_manager.set_total_trials(config['max_trials'])
+        # Set total trials in session manager to match configuration
+        session_manager.set_total_trials(MAX_TRIALS)
         
         # Validate stimulus image selection before initialization
         selected_image = st.session_state.get('selected_stimulus_image')
@@ -254,16 +233,16 @@ def _initialize_experiment(session_manager, participant_id: str, config: dict, s
         # At this stage, we always start with practice mode preparation
         # The actual practice mode will be determined in instructions screen
         st.session_state.mtf_experiment_manager = MTFExperimentManager(
-            max_trials=config['max_trials'],
-            min_trials=config['min_trials'],
-            convergence_threshold=config['convergence_threshold'],
+            max_trials=MAX_TRIALS,
+            min_trials=MIN_TRIALS,
+            convergence_threshold=CONVERGENCE_THRESHOLD,
             participant_id=session_manager.get_participant_id(),
             base_image_path=selected_image,
             is_practice=True  # Start with practice-ready manager, will recreate for main experiment
         )
         session_manager.set_show_trial_feedback(show_trial_feedback)
         
-        logger.info(f"🔧 Trial configuration: max_trials={config['max_trials']}, min_trials={config['min_trials']}")
+        logger.info(f"🔧 Trial configuration: max_trials={MAX_TRIALS}, min_trials={MIN_TRIALS}")
         logger.info(f"🔧 Trial feedback setting saved: {show_trial_feedback}")
         
         session_manager.set_experiment_stage('instructions')

@@ -9,7 +9,7 @@ from ui.components.progress_indicators import (
     show_trial_progress, show_animated_fixation, show_feedback_message
 )
 from utils.logger import get_logger
-from config.settings import PRACTICE_TRIAL_LIMIT
+from config.settings import PRACTICE_TRIAL_LIMIT, MAX_TRIALS, MIN_TRIALS, CONVERGENCE_THRESHOLD, STIMULUS_DURATION
 
 logger = get_logger(__name__)
 
@@ -308,9 +308,9 @@ def _display_practice_completion(session_manager):
             # Recreate MTF experiment manager for practice mode
             from mtf_experiment import MTFExperimentManager
             st.session_state.mtf_experiment_manager = MTFExperimentManager(
-                max_trials=st.session_state.get('max_trials', 50),
-                min_trials=st.session_state.get('min_trials', 15),
-                convergence_threshold=st.session_state.get('convergence_threshold', 0.15),
+                max_trials=MAX_TRIALS,
+                min_trials=MIN_TRIALS,
+                convergence_threshold=CONVERGENCE_THRESHOLD,
                 participant_id=session_manager.get_participant_id(),
                 base_image_path=st.session_state.get('selected_stimulus_image'),
                 is_practice=True  # Reset for practice mode
@@ -342,9 +342,9 @@ def _display_practice_completion(session_manager):
             # Recreate MTF experiment manager for main experiment (non-practice mode)
             from mtf_experiment import MTFExperimentManager
             st.session_state.mtf_experiment_manager = MTFExperimentManager(
-                max_trials=st.session_state.get('max_trials', 50),
-                min_trials=st.session_state.get('min_trials', 15),
-                convergence_threshold=st.session_state.get('convergence_threshold', 0.15),
+                max_trials=MAX_TRIALS,
+                min_trials=MIN_TRIALS,
+                convergence_threshold=CONVERGENCE_THRESHOLD,
                 participant_id=session_manager.get_participant_id(),
                 base_image_path=st.session_state.get('selected_stimulus_image'),
                 is_practice=False  # This is the main experiment
@@ -356,10 +356,10 @@ def _display_practice_completion(session_manager):
                 experiment_id = session_manager.create_experiment_record(
                     experiment_type="MTF_Clarity",
                     use_ado=True,
-                    max_trials=st.session_state.get('max_trials', 50),
-                    min_trials=st.session_state.get('min_trials', 15),
-                    convergence_threshold=st.session_state.get('convergence_threshold', 0.15),
-                    stimulus_duration=st.session_state.get('stimulus_duration', 1.0),
+                    max_trials=MAX_TRIALS,
+                    min_trials=MIN_TRIALS,
+                    convergence_threshold=CONVERGENCE_THRESHOLD,
+                    stimulus_duration=STIMULUS_DURATION,
                     num_practice_trials=session_manager.get_practice_trials_completed()
                 )
                 if experiment_id:
@@ -436,10 +436,10 @@ def _display_ado_feedback(trial_data, session_manager):
                 
                 # Show convergence information
                 threshold_sd = estimates.get('threshold_sd', float('inf'))
-                if threshold_sd < 0.15:  # Convergence threshold
+                if threshold_sd < CONVERGENCE_THRESHOLD:  # Convergence threshold
                     st.success("✅ ADO 已收斂，估計值較為可靠")
                 else:
-                    remaining_uncertainty = threshold_sd - 0.15
+                    remaining_uncertainty = threshold_sd - CONVERGENCE_THRESHOLD
                     st.warning(f"⏳ ADO 尚未收斂 (剩餘不確定性: {remaining_uncertainty:.2f})")
                 
             except Exception as e:

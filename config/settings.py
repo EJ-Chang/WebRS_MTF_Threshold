@@ -40,4 +40,10 @@ ENVIRONMENT = detect_environment()
 PAGE_CONFIG = get_page_config()
 
 # Experiment configuration
-PRACTICE_TRIAL_LIMIT = 1  # Number of practice trials before main experiment
+PRACTICE_TRIAL_LIMIT = 3  # Number of practice trials before main experiment
+
+# Main experiment configuration
+MAX_TRIALS = 45  # Maximum number of trials in the main experiment
+MIN_TRIALS = 15  # Minimum number of trials before convergence check
+CONVERGENCE_THRESHOLD = 0.15  # Convergence criterion for threshold SD
+STIMULUS_DURATION = 1.0  # Stimulus display duration in seconds
