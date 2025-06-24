@@ -4,7 +4,7 @@ Results screen for WebRS MTF Threshold experiment.
 import streamlit as st
 import pandas as pd
 from ui.components.progress_indicators import show_completion_celebration
-from ui.components.response_buttons import create_action_button, create_reset_button
+from ui.components.response_buttons import create_action_button
 from utils.helpers import format_percentage, format_time_duration
 from utils.logger import get_logger
 from utils.analysis_tools import plot_psychometric_function
@@ -19,6 +19,9 @@ def display_results_screen(session_manager) -> None:
         session_manager: SessionStateManager instance
     """
     try:
+        # Ensure all data is saved before showing results
+        _ensure_final_data_save(session_manager)
+        
         # Show completion celebration
         show_completion_celebration()
         
@@ -39,8 +42,9 @@ def display_results_screen(session_manager) -> None:
         # Display detailed results
         _display_detailed_results(trial_results)
         
-        # Display psychometric function using the proper analysis function
-        plot_psychometric_function(trial_results)
+        # Display psychometric function using the proper analysis function (only experiment trials)
+        experiment_trials = [t for t in trial_results if not t.get('is_practice', False)]
+        plot_psychometric_function(experiment_trials)
         
         # Download options
         _display_download_options(trial_results, session_manager.get_participant_id())
@@ -56,12 +60,15 @@ def _display_summary_statistics(summary, trial_results):
     """Display summary statistics"""
     st.subheader("📈 實驗統計")
     
-    # Calculate statistics from trial results
-    total_trials = len(trial_results)
-    clear_responses = sum(1 for r in trial_results if r.get('response') == 'clear')
+    # 只計算正式實驗資料（排除練習試驗）
+    experiment_trials = [t for t in trial_results if not t.get('is_practice', False)]
+    
+    # Calculate statistics from experiment trials only
+    total_trials = len(experiment_trials)
+    clear_responses = sum(1 for r in experiment_trials if r.get('response') == 'clear')
     clear_rate = clear_responses / total_trials if total_trials > 0 else 0
     
-    reaction_times = [r.get('reaction_time', 0) for r in trial_results if r.get('reaction_time')]
+    reaction_times = [r.get('reaction_time', 0) for r in experiment_trials if r.get('reaction_time')]
     avg_reaction_time = sum(reaction_times) / len(reaction_times) if reaction_times else 0
     
     # Display metrics
@@ -83,8 +90,11 @@ def _display_detailed_results(trial_results):
     """Display detailed trial results"""
     st.subheader("📋 詳細結果")
     
+    # 只顯示正式實驗資料（排除練習試驗）
+    experiment_trials = [t for t in trial_results if not t.get('is_practice', False)]
+    
     # Convert to DataFrame for better display
-    df = pd.DataFrame(trial_results)
+    df = pd.DataFrame(experiment_trials)
     
     if not df.empty:
         # Select relevant columns for display
@@ -135,10 +145,13 @@ def _display_download_options(trial_results, participant_id):
     st.subheader("💾 下載結果")
     
     try:
-        # Convert to DataFrame
-        df = pd.DataFrame(trial_results)
+        # 只包含正式實驗資料（排除練習試驗）
+        experiment_trials = [t for t in trial_results if not t.get('is_practice', False)]
         
-        if not df.empty:
+        if experiment_trials:
+            # Convert to DataFrame
+            df = pd.DataFrame(experiment_trials)
+            
             # CSV download
             csv_data = df.to_csv(index=False)
             st.download_button(
@@ -156,12 +169,87 @@ def _display_download_options(trial_results, participant_id):
                 file_name=f"{participant_id}_mtf_results.json",
                 mime="application/json"
             )
+            
+            st.info(f"📊 僅包含正式實驗資料：{len(experiment_trials)} 筆試驗")
         else:
-            st.warning("沒有數據可供下載")
+            st.warning("沒有正式實驗數據可供下載")
             
     except Exception as e:
         logger.error(f"Error creating download options: {e}")
         st.error("創建下載選項時發生錯誤")
+
+def _ensure_final_data_save(session_manager):
+    """Ensure all data is saved before showing results"""
+    try:
+        # Get experiment controller from session state
+        if 'experiment_controller' in st.session_state:
+            experiment_controller = st.session_state.experiment_controller
+            
+            # Show data saving status
+            with st.container():
+                save_status = st.empty()
+                save_status.info("🔄 正在確認實驗數據儲存...")
+                
+                # Ensure all data is saved
+                all_saved = experiment_controller.ensure_all_data_saved()
+                
+                # Finalize experiment in database
+                db_finalized = experiment_controller.finalize_experiment_in_database()
+                
+                # Update status
+                if all_saved and db_finalized:
+                    save_status.success("✅ 所有實驗數據已成功儲存到 CSV 和資料庫")
+                elif all_saved:
+                    save_status.warning("✅ 實驗數據已儲存到 CSV，但資料庫更新失敗")
+                else:
+                    save_status.error("❌ 部分實驗數據可能未正確儲存")
+                
+                # Show detailed storage information
+                _display_storage_summary(session_manager, experiment_controller)
+                
+    except Exception as e:
+        logger.error(f"Error in final data save: {e}")
+        st.error(f"確認資料儲存時發生錯誤：{e}")
+
+def _display_storage_summary(session_manager, experiment_controller):
+    """Display storage summary information"""
+    try:
+        trial_results = session_manager.get_trial_results()
+        saved_trials = session_manager.get_saved_trials()
+        experiment_id = session_manager.get_experiment_id()
+        participant_id = session_manager.get_participant_id()
+        
+        # Filter non-practice trials
+        non_practice_trials = [t for t in trial_results if not t.get('is_practice', False)]
+        
+        # Display storage info
+        with st.expander("📋 資料儲存詳情", expanded=False):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.metric("總試驗數", len(trial_results))
+                st.metric("正式試驗數", len(non_practice_trials))
+                st.metric("已儲存試驗數", saved_trials)
+            
+            with col2:
+                st.metric("參與者ID", participant_id or "未設定")
+                st.metric("實驗ID", experiment_id or "未建立")
+                
+                # Check database manager status
+                db_manager = session_manager.get_db_manager()
+                db_status = "✅ 已連接" if db_manager and session_manager.is_db_manager_initialized() else "❌ 未連接"
+                st.metric("資料庫狀態", db_status)
+            
+            # Show any discrepancies
+            if len(non_practice_trials) != saved_trials:
+                st.warning(f"⚠️ 發現資料不一致：{len(non_practice_trials)} 個正式試驗，但只有 {saved_trials} 個已儲存")
+            
+            if not experiment_id:
+                st.warning("⚠️ 未找到資料庫實驗記錄ID，資料可能只儲存在 CSV 檔案中")
+        
+    except Exception as e:
+        logger.error(f"Error displaying storage summary: {e}")
+        st.error("顯示儲存摘要時發生錯誤")
 
 def _show_navigation_options(session_manager):
     """Show navigation options"""
@@ -171,14 +259,8 @@ def _show_navigation_options(session_manager):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if create_action_button(
-            "重新開始實驗",
-            button_type="secondary",
-            key="restart_experiment"
-        ):
-            if create_reset_button("確認重新開始", key_suffix="results"):
-                session_manager.reset_experiment()
-                st.rerun()
+        # 重新開始實驗功能已移除，將在後續重新實現
+        st.empty()
     
     with col2:
         if create_action_button(
@@ -186,8 +268,13 @@ def _show_navigation_options(session_manager):
             button_type="primary",
             key="return_home"
         ):
-            session_manager.set_experiment_stage('welcome')
-            st.rerun()
+            # Simulate complete page reload for clean restart
+            from core.session_manager import SessionStateManager
+            success = SessionStateManager.simulate_page_reload()
+            if success:
+                st.rerun()
+            else:
+                st.error("重新載入失敗，請手動重新整理頁面 (F5)")
     
     with col3:
         if create_action_button(

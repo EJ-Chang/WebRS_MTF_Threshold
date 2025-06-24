@@ -38,3 +38,6 @@ def get_page_config():
 # Environment variables
 ENVIRONMENT = detect_environment()
 PAGE_CONFIG = get_page_config()
+
+# Experiment configuration
+PRACTICE_TRIAL_LIMIT = 1  # Number of practice trials before main experiment

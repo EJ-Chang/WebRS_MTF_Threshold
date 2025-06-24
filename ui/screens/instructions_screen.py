@@ -90,6 +90,18 @@ def display_instructions_screen(session_manager) -> None:
             st.rerun()
         
         if next_pressed:
+            # Recreate MTF experiment manager with correct practice mode setting
+            from mtf_experiment import MTFExperimentManager
+            st.session_state.mtf_experiment_manager = MTFExperimentManager(
+                max_trials=st.session_state.get('max_trials', 50),
+                min_trials=st.session_state.get('min_trials', 15),
+                convergence_threshold=st.session_state.get('convergence_threshold', 0.15),
+                participant_id=session_manager.get_participant_id(),
+                base_image_path=st.session_state.get('selected_stimulus_image'),
+                is_practice=practice_mode  # Use the actual practice mode selection
+            )
+            logger.info(f"🔄 MTF experiment manager recreated with practice={practice_mode}")
+            
             # Create experiment record for non-practice mode
             if not practice_mode:
                 experiment_id = session_manager.create_experiment_record(

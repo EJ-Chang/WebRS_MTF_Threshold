@@ -5,6 +5,7 @@ import streamlit as st
 import time
 from typing import Optional
 from utils.logger import get_logger
+from config.settings import PRACTICE_TRIAL_LIMIT
 
 logger = get_logger(__name__)
 
@@ -62,12 +63,11 @@ def show_trial_progress(current_trial: int, total_trials: int, is_practice: bool
     """
     try:
         if is_practice:
-            practice_limit = 5
             # Display practice counter starting from 1 for user-friendly display
-            display_count = practice_completed + 1 if practice_completed < practice_limit else practice_limit
-            practice_progress = practice_completed / practice_limit if practice_limit > 0 else 0
+            display_count = practice_completed + 1 if practice_completed < PRACTICE_TRIAL_LIMIT else PRACTICE_TRIAL_LIMIT
+            practice_progress = practice_completed / PRACTICE_TRIAL_LIMIT if PRACTICE_TRIAL_LIMIT > 0 else 0
             st.progress(practice_progress)
-            st.info(f"🎯 練習試驗: {display_count}/{practice_limit} ({practice_progress:.1%})")
+            st.info(f"🎯 練習試驗: {display_count}/{PRACTICE_TRIAL_LIMIT} ({practice_progress:.1%})")
         else:
             progress = current_trial / total_trials if total_trials > 0 else 0
             st.progress(progress)
@@ -116,8 +116,8 @@ def show_experiment_status(stage: str, participant_id: Optional[str] = None, ses
                 if is_practice:
                     practice_completed = session_manager.get_practice_trials_completed()
                     # Display practice counter starting from 1 for user-friendly display
-                    display_count = practice_completed + 1 if practice_completed < 5 else 5
-                    st.sidebar.metric("練習進度", f"{display_count}/5")
+                    display_count = practice_completed + 1 if practice_completed < PRACTICE_TRIAL_LIMIT else PRACTICE_TRIAL_LIMIT
+                    st.sidebar.metric("練習進度", f"{display_count}/{PRACTICE_TRIAL_LIMIT}")
                     st.sidebar.metric("練習模式", "✅ 啟用")
                 else:
                     st.sidebar.metric("試驗進度", f"{current_trial}/{total_trials}")
@@ -130,14 +130,21 @@ def show_experiment_status(stage: str, participant_id: Optional[str] = None, ses
             st.sidebar.metric("回饋顯示", "✅ 開啟" if show_feedback else "❌ 關閉")
             st.sidebar.metric("固視時間", f"{fixation_duration:.1f}s")
             
-            # Show data status
+            # Show data status (separate practice and experiment trials)
             saved_trials = session_manager.get_saved_trials()
-            trial_results = len(session_manager.get_trial_results())
+            all_trial_results = session_manager.get_trial_results()
             
-            if saved_trials > 0 or trial_results > 0:
+            # Filter practice and experiment trials
+            practice_trials = [t for t in all_trial_results if t.get('is_practice', False)]
+            experiment_trials = [t for t in all_trial_results if not t.get('is_practice', False)]
+            
+            if saved_trials > 0 or len(experiment_trials) > 0 or len(practice_trials) > 0:
                 st.sidebar.markdown("### 💾 資料狀態")
                 st.sidebar.metric("已儲存試驗", saved_trials)
-                st.sidebar.metric("記憶中試驗", trial_results)
+                if len(experiment_trials) > 0:
+                    st.sidebar.metric("正式試驗記憶", len(experiment_trials))
+                if len(practice_trials) > 0:
+                    st.sidebar.metric("練習試驗記憶", len(practice_trials))
         
     except Exception as e:
         logger.error(f"Error showing experiment status: {e}")

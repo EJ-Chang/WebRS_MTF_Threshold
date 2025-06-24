@@ -60,10 +60,19 @@ def display_welcome_screen(session_manager) -> None:
         # ADO configuration info
         _display_ado_info()
 
-        # Start experiment button
-        if create_action_button("開始 MTF 實驗", key="start_mtf_experiment"):
-            if _validate_experiment_setup(participant_id):
-                _initialize_experiment(session_manager, participant_id, config, show_trial_feedback)
+        # Action buttons
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if create_action_button("🔍 刺激預覽", key="stimuli_preview"):
+                if _validate_stimuli_preview_setup():
+                    session_manager.set_experiment_stage('stimuli_preview')
+                    st.rerun()
+        
+        with col2:
+            if create_action_button("開始 MTF 實驗", key="start_mtf_experiment"):
+                if _validate_experiment_setup(participant_id):
+                    _initialize_experiment(session_manager, participant_id, config, show_trial_feedback)
 
         st.markdown("---")
 
@@ -172,8 +181,8 @@ def _display_experiment_configuration() -> dict:
     
     col1, col2 = st.columns(2)
     with col1:
-        max_trials = st.slider("最大試驗次數：", 20, 100, 50)
-        min_trials = st.slider("最小試驗次數：", 10, 30, 15)
+        max_trials = st.slider("最大試驗次數：", 3, 60, 45)
+        min_trials = st.slider("最小試驗次數：", 2, 30, 15)
 
     with col2:
         convergence_threshold = st.slider("收斂值：", 0.05, 0.3, 0.15, 0.01)
@@ -210,6 +219,13 @@ def _validate_experiment_setup(participant_id: str) -> bool:
         return False
     return True
 
+def _validate_stimuli_preview_setup() -> bool:
+    """Validate stimuli preview setup"""
+    if 'selected_stimulus_image' not in st.session_state:
+        st.error("請先選擇一個刺激圖像")
+        return False
+    return True
+
 def _initialize_experiment(session_manager, participant_id: str, config: dict, show_trial_feedback: bool) -> None:
     """Initialize experiment with given configuration"""
     try:
@@ -227,13 +243,23 @@ def _initialize_experiment(session_manager, participant_id: str, config: dict, s
         # Set total trials in session manager to match user configuration
         session_manager.set_total_trials(config['max_trials'])
         
+        # Validate stimulus image selection before initialization
+        selected_image = st.session_state.get('selected_stimulus_image')
+        if selected_image is None:
+            logger.error("selected_stimulus_image is None during experiment initialization")
+            st.error("❌ 刺激圖像選擇狀態異常，請重新選擇圖像")
+            return
+        
         # Initialize MTF experiment manager
+        # At this stage, we always start with practice mode preparation
+        # The actual practice mode will be determined in instructions screen
         st.session_state.mtf_experiment_manager = MTFExperimentManager(
             max_trials=config['max_trials'],
             min_trials=config['min_trials'],
             convergence_threshold=config['convergence_threshold'],
             participant_id=session_manager.get_participant_id(),
-            base_image_path=st.session_state.selected_stimulus_image
+            base_image_path=selected_image,
+            is_practice=True  # Start with practice-ready manager, will recreate for main experiment
         )
         session_manager.set_show_trial_feedback(show_trial_feedback)
         

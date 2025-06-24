@@ -9,6 +9,7 @@ from ui.components.progress_indicators import (
     show_trial_progress, show_animated_fixation, show_feedback_message
 )
 from utils.logger import get_logger
+from config.settings import PRACTICE_TRIAL_LIMIT
 
 logger = get_logger(__name__)
 
@@ -32,6 +33,11 @@ def _perform_ado_computation_during_fixation(session_manager, experiment_control
             logger.debug("Skipping ADO computation in practice mode")
             return
         
+        # Ensure experiment_controller is available
+        if experiment_controller is None:
+            logger.warning("Experiment controller not available for ADO computation")
+            return
+        
         # Compute next stimulus value using ADO
         next_stimulus_value = experiment_controller.compute_next_stimulus_ado()
         if next_stimulus_value is not None:
@@ -47,6 +53,15 @@ def _perform_ado_computation_during_fixation(session_manager, experiment_control
     except Exception as e:
         logger.error(f"Error during ADO computation in fixation: {e}")
 
+def _log_trial_counter_status(session_manager):
+    """Log current trial counter status for debugging"""
+    logger.debug(f"📊 Trial counter status:")
+    logger.debug(f"   Practice mode: {session_manager.is_practice_mode()}")
+    logger.debug(f"   Current trial: {session_manager.get_current_trial()}")
+    logger.debug(f"   Experiment trial: {session_manager.get_experiment_trial()}")
+    logger.debug(f"   Practice trials completed: {session_manager.get_practice_trials_completed()}")
+    logger.debug(f"   Total trials: {session_manager.get_total_trials()}")
+
 def display_trial_screen(session_manager, experiment_controller) -> None:
     """
     Display trial screen for MTF experiment
@@ -56,29 +71,26 @@ def display_trial_screen(session_manager, experiment_controller) -> None:
         experiment_controller: ExperimentController instance
     """
     try:
+        # Ensure experiment_controller is available
+        if experiment_controller is None:
+            from core.experiment_controller import ExperimentController
+            experiment_controller = ExperimentController(session_manager)
+            st.session_state.experiment_controller = experiment_controller
+            logger.info("🔧 Recreated experiment controller for trial screen")
+        
+        # Add counter validation and debug logging
+        _log_trial_counter_status(session_manager)
+        
         # Check practice mode completion first
         if session_manager.is_practice_mode():
             practice_completed = session_manager.get_practice_trials_completed()
-            if practice_completed >= 5:  # Practice limit: 5 trials
+            if practice_completed >= PRACTICE_TRIAL_LIMIT:  # Practice limit: configurable trials
+                logger.info(f"📋 Practice mode completed: {practice_completed}/{PRACTICE_TRIAL_LIMIT} trials")
                 _display_practice_completion(session_manager)
                 return
         
-        # Check if experiment is complete
-        if experiment_controller.check_experiment_completion():
-            # Ensure any pending trial data is saved before completing
-            trial_results = session_manager.get_trial_results()
-            if trial_results and not session_manager.is_practice_mode():
-                latest_result = trial_results[-1]
-                # Check if the last trial hasn't been saved yet
-                saved_trials = session_manager.get_saved_trials()
-                if len(trial_results) > saved_trials:
-                    logger.info(f"Saving final trial data before experiment completion")
-                    experiment_controller.save_trial_data(latest_result)
-            
-            experiment_controller.complete_experiment()
-            session_manager.set_experiment_stage('results')
-            st.rerun()
-            return
+        # Note: Experiment completion check moved to AFTER trial processing
+        # This ensures the last trial is properly processed and saved
         
         # Show progress
         progress = experiment_controller.get_experiment_progress()
@@ -114,8 +126,16 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
         st.session_state.trial_phase = 'fixation'
         st.session_state.phase_start_time = time.time()
     
+    # Safely calculate phase elapsed time with None check
     current_time = time.time()
-    phase_elapsed = current_time - st.session_state.phase_start_time
+    phase_start_time = st.session_state.get('phase_start_time')
+    if phase_start_time is not None:
+        phase_elapsed = current_time - phase_start_time
+    else:
+        # Fallback: reset phase start time to now
+        logger.warning("phase_start_time is None, resetting to current time")
+        st.session_state.phase_start_time = current_time
+        phase_elapsed = 0.0
     
     if st.session_state.trial_phase == 'fixation':
         # Show fixation cross
@@ -152,31 +172,54 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
         )
         
         # Response buttons (restored to original horizontal layout)
+        # Use appropriate trial counter based on mode
+        trial_key = session_manager.get_experiment_trial() if not session_manager.is_practice_mode() else session_manager.get_practice_trials_completed()
         left_pressed, right_pressed = create_response_buttons(
             left_label="不清楚",
             right_label="清楚",
-            key_suffix=f"trial_{session_manager.get_current_trial()}"
+            key_suffix=f"trial_{trial_key}_{'exp' if not session_manager.is_practice_mode() else 'practice'}"
         )
         
         # Process response
         if left_pressed or right_pressed:
             response = "not_clear" if left_pressed else "clear"
-            response_time = time.time() - st.session_state.phase_start_time
+            # Safely calculate response time with None check
+            phase_start_time = st.session_state.get('phase_start_time')
+            if phase_start_time is not None:
+                response_time = time.time() - phase_start_time
+            else:
+                logger.warning("phase_start_time is None, using default response time")
+                response_time = 0.5  # Default fallback response time
             
             # Process the response
             if experiment_controller.process_response(response, response_time):
-                # Note: Practice trial counter is incremented in experiment_controller.process_response()
-                # No need to increment here to avoid double counting
-                
-                # Save trial data (only for non-practice trials)
+                # Save trial data using simplified practice/experiment logic
                 trial_results = session_manager.get_trial_results()
                 if trial_results:
                     latest_result = trial_results[-1]
-                    # Only save if not in practice mode
-                    if not session_manager.is_practice_mode():
-                        experiment_controller.save_trial_data(latest_result)
-                    else:
-                        logger.debug("Practice trial - not saving data")
+                    
+                    # Double-check practice mode using session manager state as primary source
+                    is_practice_trial = session_manager.is_practice_mode()
+                    trial_number = latest_result.get('trial_number', 'unknown')
+                    
+                    # Also verify with trial data as secondary check
+                    data_is_practice = latest_result.get('is_practice', False)
+                    if is_practice_trial != data_is_practice:
+                        logger.warning(f"⚠️ Practice mode mismatch: session={is_practice_trial}, data={data_is_practice}")
+                    
+                    if is_practice_trial == False:  # Experiment trial
+                        # Storage enabled - save data immediately and verify success
+                        logger.info(f"🖾 Attempting to save EXPERIMENT trial {trial_number}")
+                        save_success = experiment_controller.save_trial_data(latest_result)
+                        if save_success:
+                            logger.info(f"✅ EXPERIMENT trial {trial_number} data saved successfully")
+                        else:
+                            logger.error(f"❌ Failed to save EXPERIMENT trial {trial_number} data")
+                            st.error("⚠️ 資料儲存失敗，請記下此試驗結果")
+                    
+                    elif is_practice_trial == True:  # Practice trial
+                        # Storage disabled - only log the event
+                        logger.info(f"🏃 PRACTICE trial {trial_number} - storage disabled")
                 
                 # Show feedback if enabled
                 if session_manager.get_show_trial_feedback():
@@ -207,8 +250,23 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
             st.rerun()
 
 def _prepare_next_trial(session_manager):
-    """Prepare for next trial"""
-    # Clear trial-specific session state
+    """Prepare for next trial or complete experiment if done"""
+    from core.experiment_controller import ExperimentController
+    
+    # Log trial counter status before completion check
+    _log_trial_counter_status(session_manager)
+    
+    # Check if experiment is complete AFTER all trial processing is done
+    experiment_controller = ExperimentController(session_manager)
+    if experiment_controller.check_experiment_completion():
+        logger.info(f"🏁 Experiment completion detected - transitioning to results")
+        # All trials completed - proceed to results
+        experiment_controller.finalize_experiment_in_database()
+        experiment_controller.complete_experiment()
+        session_manager.set_experiment_stage('results')
+        return  # Don't clear trial data, let results screen handle it
+    
+    # Clear trial-specific session state for next trial
     keys_to_clear = [
         'trial_phase', 'phase_start_time', 'feedback_response', 'feedback_time'
     ]
@@ -223,7 +281,7 @@ def _prepare_next_trial(session_manager):
 def _display_practice_completion(session_manager):
     """Display practice completion screen"""
     st.header("🎯 練習完成！")
-    st.success("您已完成 5 次練習試驗")
+    st.success(f"您已完成 {PRACTICE_TRIAL_LIMIT} 次練習試驗")
     
     st.markdown("### 練習結果概要")
     practice_completed = session_manager.get_practice_trials_completed()
@@ -236,8 +294,29 @@ def _display_practice_completion(session_manager):
     with col1:
         if st.button("🎯 再練習一次", key="retry_practice", use_container_width=True):
             # Reset practice trials and stay in practice mode
-            st.session_state.practice_trials_completed = 0
+            logger.info(f"🔄 Restarting practice mode")
+            logger.info(f"   Previous practice trials: {session_manager.get_practice_trials_completed()}")
+            
+            # Reset practice counters properly
+            session_manager.reset_practice_counters()
             session_manager.set_mtf_trial_data(None)
+            
+            # Validate reset
+            logger.info(f"   Post-reset - Practice trials: {session_manager.get_practice_trials_completed()}")
+            logger.info(f"   Post-reset - Practice mode: {session_manager.is_practice_mode()}")
+            
+            # Recreate MTF experiment manager for practice mode
+            from mtf_experiment import MTFExperimentManager
+            st.session_state.mtf_experiment_manager = MTFExperimentManager(
+                max_trials=st.session_state.get('max_trials', 50),
+                min_trials=st.session_state.get('min_trials', 15),
+                convergence_threshold=st.session_state.get('convergence_threshold', 0.15),
+                participant_id=session_manager.get_participant_id(),
+                base_image_path=st.session_state.get('selected_stimulus_image'),
+                is_practice=True  # Reset for practice mode
+            )
+            logger.info("🔄 MTF experiment manager recreated for practice mode (practice=True)")
+            
             # Clear trial-specific session state
             keys_to_clear = ['trial_phase', 'phase_start_time', 'feedback_response', 'feedback_time']
             for key in keys_to_clear:
@@ -247,20 +326,58 @@ def _display_practice_completion(session_manager):
     
     with col2:
         if st.button("🚀 開始正式實驗", key="start_experiment", use_container_width=True):
-            # Switch to experiment mode
-            session_manager.set_practice_mode(False)
-            st.session_state.current_trial = 0  # Reset trial counter
+            # Switch to experiment mode and reset counters properly
+            logger.info(f"🔄 Starting experiment mode transition")
+            logger.info(f"   Practice trials completed: {session_manager.get_practice_trials_completed()}")
+            
+            # Use session manager's proper transition method
+            session_manager.set_practice_mode(False)  # This will reset experiment counters
             session_manager.set_mtf_trial_data(None)
+            
+            # Validate counter reset
+            logger.info(f"   Post-transition - Current trial: {session_manager.get_current_trial()}")
+            logger.info(f"   Post-transition - Experiment trial: {session_manager.get_experiment_trial()}")
+            logger.info(f"   Post-transition - Practice mode: {session_manager.is_practice_mode()}")
+            
+            # Recreate MTF experiment manager for main experiment (non-practice mode)
+            from mtf_experiment import MTFExperimentManager
+            st.session_state.mtf_experiment_manager = MTFExperimentManager(
+                max_trials=st.session_state.get('max_trials', 50),
+                min_trials=st.session_state.get('min_trials', 15),
+                convergence_threshold=st.session_state.get('convergence_threshold', 0.15),
+                participant_id=session_manager.get_participant_id(),
+                base_image_path=st.session_state.get('selected_stimulus_image'),
+                is_practice=False  # This is the main experiment
+            )
+            logger.info("🔄 MTF experiment manager recreated for main experiment (practice=False)")
+            
+            # Ensure experiment record is created for database storage
+            if not session_manager.get_experiment_id():
+                experiment_id = session_manager.create_experiment_record(
+                    experiment_type="MTF_Clarity",
+                    use_ado=True,
+                    max_trials=st.session_state.get('max_trials', 50),
+                    min_trials=st.session_state.get('min_trials', 15),
+                    convergence_threshold=st.session_state.get('convergence_threshold', 0.15),
+                    stimulus_duration=st.session_state.get('stimulus_duration', 1.0),
+                    num_practice_trials=session_manager.get_practice_trials_completed()
+                )
+                if experiment_id:
+                    logger.info(f"✅ Experiment record created for main experiment: {experiment_id}")
+                else:
+                    logger.warning("⚠️ Failed to create experiment record, continuing with CSV-only storage")
+            
             # Clear trial-specific session state
             keys_to_clear = ['trial_phase', 'phase_start_time', 'feedback_response', 'feedback_time']
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
-            logger.info("Practice completed, starting main experiment")
+            logger.info(f"🏁 Practice completed ({session_manager.get_practice_trials_completed()} trials), starting main experiment")
+            logger.info(f"🖾 Experiment trial counter reset to: {session_manager.get_experiment_trial()}")
             st.rerun()
     
     st.markdown("---")
-    st.info("💡 **提示**: 練習模式的數據不會被儲存到 CSV 檔案或資料庫，只有正式實驗的數據會被保存")
+    st.info("💡 **提示**: 練習模式的數據不會被儲存，只有正式實驗的數據會被存下來")
 
 def _display_ado_feedback(trial_data, session_manager):
     """Display ADO feedback information"""
@@ -298,7 +415,7 @@ def _display_ado_feedback(trial_data, session_manager):
                     st.metric(
                         "閾值不確定性", 
                         f"±{estimates.get('threshold_sd', 0):.2f}",
-                        help="估計的標準偏差，越小表示越確定"
+                        help="估計的標準差，越小表示越確定"
                     )
                 
                 with col2:
@@ -310,7 +427,7 @@ def _display_ado_feedback(trial_data, session_manager):
                     st.metric(
                         "斜率不確定性", 
                         f"±{estimates.get('slope_sd', 0):.2f}",
-                        help="斜率估計的標準偏差"
+                        help="斜率估計的標準差"
                     )
                 
                 # Display current trial MTF value
@@ -320,7 +437,7 @@ def _display_ado_feedback(trial_data, session_manager):
                 # Show convergence information
                 threshold_sd = estimates.get('threshold_sd', float('inf'))
                 if threshold_sd < 0.15:  # Convergence threshold
-                    st.success("✅ ADO 已收斂，估計較為可靠")
+                    st.success("✅ ADO 已收斂，估計值較為可靠")
                 else:
                     remaining_uncertainty = threshold_sd - 0.15
                     st.warning(f"⏳ ADO 尚未收斂 (剩餘不確定性: {remaining_uncertainty:.2f})")

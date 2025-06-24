@@ -89,32 +89,41 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
         img_id = f"mtf_img_{int(time.time() * 1000)}"
         final_h, final_w = processed_img.shape[:2]
 
-        # Fixed pixel size styling to prevent DPI scaling
+        # 100% actual size styling to prevent any scaling
         simple_style = f"""
         display: block;
         margin: 0 auto;
         width: {final_w}px !important;
         height: {final_h}px !important;
+        max-width: none !important;
+        max-height: none !important;
         image-rendering: pixelated;
-        zoom: 1;
-        -webkit-transform: scale(1);
-        -moz-transform: scale(1);
-        -ms-transform: scale(1);
-        transform: scale(1);
+        image-rendering: -moz-crisp-edges;
+        image-rendering: crisp-edges;
+        zoom: 1 !important;
+        -webkit-transform: none !important;
+        -moz-transform: none !important;
+        -ms-transform: none !important;
+        transform: none !important;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
         """
 
-        # Clean HTML for stimulus display with fixed sizing
+        # Clean HTML for stimulus display with 100% actual sizing
         html_content = f"""
-        <div style="text-align: center; margin: 20px 0;">
+        <div style="text-align: center; margin: 20px 0; overflow: visible; width: 100%; height: auto;">
             <img id="{img_id}" src="data:image/png;base64,{img_str}" 
-                 style="{simple_style}">
+                 style="{simple_style}"
+                 draggable="false">
             <p style="margin: 10px 0; color: #666; font-size: 14px;">{caption}</p>
         </div>
         """
         st.markdown(html_content, unsafe_allow_html=True)
 
         # Log image display for debugging
-        logger.debug(f"Displayed image with original dimensions: {final_w}x{final_h}")
+        logger.debug(f"Displayed image at 100% actual size: {final_w}x{final_h} pixels")
 
         # Return image dimensions for button positioning
         return {

@@ -13,6 +13,7 @@ import base64
 from io import BytesIO
 from PIL import Image
 import cv2
+from config.settings import PRACTICE_TRIAL_LIMIT
 
 # Import the ADO and MTF utilities with proper fallback handling
 # Force use of real ADO engine from ado_utils.py
@@ -337,7 +338,8 @@ class MTFExperimentManager:
                  min_trials: int = 15,
                  convergence_threshold: float = 0.15,
                  participant_id: str = "",
-                 base_image_path: str = None):
+                 base_image_path: str = None,
+                 is_practice: bool = False):
         """
         Initialize MTF experiment manager
         
@@ -347,9 +349,18 @@ class MTFExperimentManager:
             convergence_threshold: Convergence criterion for threshold SD
             participant_id: Participant identifier
             base_image_path: Path to base stimulus image
+            is_practice: Whether this is practice mode (uses same ADO logic, but limited trials)
         """
-        self.max_trials = max_trials
-        self.min_trials = min_trials
+        # Practice mode setup: use same ADO logic but limit trials
+        self.is_practice = is_practice
+        if is_practice:
+            # Practice mode: configurable trials, same ADO logic
+            self.max_trials = PRACTICE_TRIAL_LIMIT
+            self.min_trials = 1  # Allow convergence check after 1 trial in practice
+        else:
+            self.max_trials = max_trials
+            self.min_trials = min_trials
+            
         self.convergence_threshold = convergence_threshold
         self.participant_id = participant_id
         
@@ -374,11 +385,34 @@ class MTFExperimentManager:
                 print("⚠️ Base image not found, will use generated test pattern")
                 self.base_image_path = "test_pattern"
         else:
-            self.base_image_path = base_image_path
+            # Validate that base_image_path is not None and is a valid path
+            if base_image_path and isinstance(base_image_path, str):
+                self.base_image_path = base_image_path
+            else:
+                print(f"⚠️ Invalid base_image_path provided: {base_image_path}, using auto-detection")
+                # Fall back to auto-detection
+                possible_paths = [
+                    "stimuli_preparation/stimuli_img.png",
+                    "./stimuli_preparation/stimuli_img.png",
+                    os.path.join(os.path.dirname(__file__), "stimuli_preparation", "stimuli_img.png"),
+                    "stimuli_img.png"
+                ]
+                
+                self.base_image_path = None
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        self.base_image_path = path
+                        print(f"✅ Found base image at: {path}")
+                        break
+                
+                if self.base_image_path is None:
+                    print("⚠️ Base image not found, will use generated test pattern")
+                    self.base_image_path = "test_pattern"
         
         # Trial data storage
         self.trial_data = []
-        self.current_trial = 0
+        # Remove internal counter - use session state instead
+        # self.current_trial = 0  # REMOVED: Use session state counters
         self.converged = False
         
         # Initialize ADO engine
@@ -488,8 +522,23 @@ class MTFExperimentManager:
     
     def get_next_trial(self) -> Optional[Dict]:
         """Get the next trial parameters using ADO"""
-        if self.current_trial >= self.max_trials or self.converged:
-            return None
+        # Import here to avoid circular dependency
+        import streamlit as st
+        
+        # ADO convergence has been disabled to ensure timing accuracy
+        # Only check trial count to ensure all max_trials are executed
+        # Use session state counters instead of internal counter for synchronization
+        
+        # In practice mode, check practice trials completed
+        if st.session_state.get('is_practice', False):
+            practice_completed = st.session_state.get('practice_trials_completed', 0)
+            if practice_completed >= PRACTICE_TRIAL_LIMIT:  # Practice limit: configurable trials
+                return None
+        else:
+            # In experiment mode, check experiment trials completed
+            experiment_trials = st.session_state.get('experiment_trial', 0)
+            if experiment_trials >= self.max_trials:
+                return None
         
         if self.ado_engine is None:
             # Fallback: random MTF selection
@@ -501,7 +550,8 @@ class MTFExperimentManager:
                 print(f"ADO error: {e}")
                 mtf_value = float(np.random.choice(np.arange(10, 90, 10)))
         
-        self.current_trial += 1
+        # Remove internal counter increment - let session state handle this
+        # self.current_trial += 1  # REMOVED: Session state will handle counter increment
         
         # Generate stimulus image
         stimulus_image = self.generate_stimulus_image(mtf_value)
@@ -524,8 +574,15 @@ class MTFExperimentManager:
         elif self.base_image_path == "test_pattern":
             stimulus_image_name = "test_pattern"
         
+        # Get trial number from session state for consistency
+        import streamlit as st
+        if st.session_state.get('is_practice', False):
+            trial_number = st.session_state.get('practice_trials_completed', 0) + 1
+        else:
+            trial_number = st.session_state.get('experiment_trial', 0) + 1
+        
         trial_data = {
-            'trial_number': self.current_trial,
+            'trial_number': trial_number,
             'mtf_value': mtf_value,
             'stimulus_image': stimulus_image,
             'stimulus_image_file': stimulus_image_name,  # 記錄使用的圖片檔名
@@ -566,8 +623,21 @@ class MTFExperimentManager:
                 self.ado_engine.update_posterior(trial_data['mtf_value'], response_value)
                 estimates = self.ado_engine.get_parameter_estimates()
                 
-                # Check convergence
-                if self.current_trial >= self.min_trials:
+                # Check convergence using session state or trial data length
+                # Import here to avoid circular dependency
+                import streamlit as st
+                
+                # Get trial count from session state or fallback to trial data length
+                if st.session_state.get('is_practice', False):
+                    completed_trials = st.session_state.get('practice_trials_completed', 0)
+                else:
+                    completed_trials = st.session_state.get('experiment_trial', 0)
+                
+                # Fallback to trial data length if session state unavailable
+                if completed_trials == 0:
+                    completed_trials = len(self.trial_data)
+                
+                if completed_trials >= self.min_trials:
                     self.converged = estimates['threshold_sd'] < self.convergence_threshold
                 
             except Exception as e:
@@ -621,8 +691,20 @@ class MTFExperimentManager:
     
     def is_experiment_complete(self) -> bool:
         """Check if experiment should end"""
-        return (self.current_trial >= self.max_trials or 
-                (self.converged and self.current_trial >= self.min_trials))
+        # Import here to avoid circular dependency
+        import streamlit as st
+        
+        # ADO convergence has been disabled to ensure timing accuracy
+        # Only check trial count to ensure all max_trials are executed
+        # Use session state counters for synchronization
+        
+        # In practice mode, never consider "complete" - let session manager handle this
+        if st.session_state.get('is_practice', False):
+            return False  # Practice completion is handled by session manager
+        else:
+            # In experiment mode, check if we've reached max trials
+            experiment_trials = st.session_state.get('experiment_trial', 0)
+            return experiment_trials >= self.max_trials
     
     def get_experiment_summary(self) -> Dict:
         """Get experiment summary statistics"""

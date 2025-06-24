@@ -26,6 +26,7 @@ class SessionStateManager:
             'experiment_stage': 'welcome',
             'participant_id': None,
             'current_trial': 0,
+            'experiment_trial': 0,  # Separate counter for experiment trials only
             'total_trials': 20,
             'is_practice': False,
             'practice_trials_completed': 0,
@@ -132,6 +133,9 @@ class SessionStateManager:
     def is_benchmark_stage(self) -> bool:
         return self.get_experiment_stage() == 'benchmark'
     
+    def is_stimuli_preview_stage(self) -> bool:
+        return self.get_experiment_stage() == 'stimuli_preview'
+    
     # Participant management
     def get_participant_id(self) -> Optional[str]:
         """Get participant ID"""
@@ -170,17 +174,55 @@ class SessionStateManager:
     
     def clear_participant_data(self):
         """Clear all participant-specific data"""
-        keys_to_clear = [
-            'participant_id', 'current_trial', 'trial_results', 
-            'saved_trials', 'experiment_completed', 'mtf_trial_data',
-            'mtf_response_pending', 'practice_trials_completed', 'experiment_id'
+        reset_values = {
+            'participant_id': None,
+            'experiment_id': None,
+            'current_trial': 0,
+            'experiment_trial': 0,
+            'trial_results': [],  # Must be empty list, not False
+            'saved_trials': 0,
+            'practice_trials_completed': 0,
+            'experiment_completed': False,
+            'mtf_trial_data': None,
+            'mtf_response_pending': False,
+            'is_practice': False,  # Reset practice mode state
+            'selected_stimulus_image': None,  # Clear stimulus selection
+            'max_trials': None,  # Clear experiment configuration
+            'min_trials': None,
+            'convergence_threshold': None,
+            'stimulus_duration': None,
+            'experiment_type': None
+        }
+        
+        for key, value in reset_values.items():
+            if key in st.session_state:
+                st.session_state[key] = value
+        
+        # Clear MTF experiment manager and related caches
+        mtf_related_keys = [
+            'mtf_experiment_manager', 'experiment_controller',
+            'trial_phase', 'phase_start_time', 'feedback_response', 'feedback_time',
+            'trial_start_time', 'response_time', 'fixation_start_time'
         ]
         
-        for key in keys_to_clear:
+        for key in mtf_related_keys:
             if key in st.session_state:
-                st.session_state[key] = None if key in ['participant_id', 'experiment_id'] else 0 if 'trial' in key else False
+                st.session_state[key] = None
         
-        logger.info("Participant data cleared")
+        logger.info("Participant data and experiment state cleared completely")
+    
+    def reset_practice_counters(self):
+        """Reset practice-specific counters only"""
+        st.session_state.practice_trials_completed = 0
+        logger.info("Practice counters reset")
+    
+    def reset_experiment_counters(self):
+        """Reset experiment-specific counters for transition from practice to experiment"""
+        st.session_state.current_trial = 0
+        st.session_state.experiment_trial = 0
+        st.session_state.saved_trials = 0
+        # Don't reset practice_trials_completed - keep for record
+        logger.info(f"Experiment counters reset (practice trials completed: {st.session_state.practice_trials_completed})")
     
     # Experiment ID management
     def get_experiment_id(self) -> Optional[int]:
@@ -229,13 +271,22 @@ class SessionStateManager:
     
     # Trial management
     def get_current_trial(self) -> int:
-        """Get current trial number"""
+        """Get current trial number (legacy - use for overall tracking)"""
         return st.session_state.current_trial
     
+    def get_experiment_trial(self) -> int:
+        """Get current experiment trial number (separate from practice)"""
+        return st.session_state.experiment_trial
+    
     def increment_trial(self):
-        """Increment trial counter"""
+        """Increment trial counter (legacy)"""
         st.session_state.current_trial += 1
         logger.debug(f"Trial incremented to: {st.session_state.current_trial}")
+    
+    def increment_experiment_trial(self):
+        """Increment experiment trial counter (only for non-practice trials)"""
+        st.session_state.experiment_trial += 1
+        logger.debug(f"Experiment trial incremented to: {st.session_state.experiment_trial}")
     
     def get_total_trials(self) -> int:
         """Get total number of trials"""
@@ -247,7 +298,16 @@ class SessionStateManager:
     
     def is_experiment_complete(self) -> bool:
         """Check if experiment is complete"""
-        return st.session_state.current_trial >= st.session_state.total_trials
+        if self.is_practice_mode():
+            return False  # Practice mode never "completes" via this check
+        # Use >= to check if we have completed all required trials
+        # experiment_trial is the count of COMPLETED trials
+        # We want to stop when we have completed exactly max_trials
+        completed_trials = st.session_state.experiment_trial
+        max_trials = st.session_state.total_trials
+        
+        logger.debug(f"Experiment completion check: {completed_trials}/{max_trials} trials completed")
+        return completed_trials >= max_trials
     
     # Practice mode
     def is_practice_mode(self) -> bool:
@@ -255,8 +315,19 @@ class SessionStateManager:
         return st.session_state.is_practice
     
     def set_practice_mode(self, is_practice: bool):
-        """Set practice mode"""
+        """Set practice mode and reset appropriate counters"""
+        old_practice_mode = st.session_state.get('is_practice', False)
         st.session_state.is_practice = is_practice
+        
+        # If transitioning from practice to experiment mode
+        if old_practice_mode == True and is_practice == False:
+            logger.info("🔄 Transitioning from practice to experiment mode")
+            self.reset_experiment_counters()
+        # If transitioning from experiment to practice mode (retry practice)
+        elif old_practice_mode == False and is_practice == True:
+            logger.info("🔄 Transitioning from experiment to practice mode")
+            self.reset_practice_counters()
+        
         logger.debug(f"Practice mode: {is_practice}")
     
     def get_practice_trials_completed(self) -> int:
@@ -352,11 +423,57 @@ class SessionStateManager:
         st.session_state.mtf_show_feedback = show
     
     # Utility methods
-    def reset_experiment(self):
-        """Reset experiment to initial state"""
-        self.set_experiment_stage('welcome')
-        self.clear_participant_data()
-        logger.info("Experiment reset to initial state")
+    @staticmethod
+    def simulate_page_reload():
+        """
+        Simulate a complete page reload by clearing all state and re-initializing
+        This is the closest we can get to F5 refresh without actually reloading the page
+        """
+        try:
+            logger.info("🔄 Simulating complete page reload...")
+            
+            # 1. Clear Streamlit caches first (before clearing session state)
+            try:
+                st.cache_data.clear()
+                st.cache_resource.clear()
+                logger.info("   ✅ Streamlit caches cleared")
+            except Exception as e:
+                logger.warning(f"   ⚠️ Cache clearing failed (not critical): {e}")
+            
+            # 2. Completely clear session state - don't preserve anything
+            st.session_state.clear()
+            logger.info("   ✅ Session state cleared")
+            
+            # 3. Re-initialize core components (avoid st.set_page_config issue)
+            # Initialize session manager first
+            st.session_state.session_manager = SessionStateManager()
+            logger.info("   ✅ SessionStateManager re-created")
+            
+            # Initialize experiment controller
+            from core.experiment_controller import ExperimentController
+            st.session_state.experiment_controller = ExperimentController(
+                st.session_state.session_manager
+            )
+            logger.info("   ✅ ExperimentController re-created")
+            
+            # 4. Ensure we're on the welcome screen
+            st.session_state.session_manager.set_experiment_stage('welcome')
+            logger.info("   ✅ Redirected to welcome screen")
+            return True
+                
+        except Exception as e:
+            logger.error(f"❌ Page reload simulation failed: {e}")
+            # Fallback: try basic reset
+            try:
+                st.session_state.clear()
+                # Re-create basic session manager
+                st.session_state.session_manager = SessionStateManager()
+                st.session_state.session_manager.set_experiment_stage('welcome')
+                logger.info("   ✅ Fallback reset completed")
+                return True
+            except Exception as e2:
+                logger.error(f"❌ Even fallback reset failed: {e2}")
+                return False
     
     def get_state_summary(self) -> Dict[str, Any]:
         """Get summary of current session state"""
@@ -364,6 +481,7 @@ class SessionStateManager:
             'stage': self.get_experiment_stage(),
             'participant_id': self.get_participant_id(),
             'current_trial': self.get_current_trial(),
+            'experiment_trial': self.get_experiment_trial(),
             'total_trials': self.get_total_trials(),
             'is_practice': self.is_practice_mode(),
             'experiment_complete': self.is_experiment_complete(),

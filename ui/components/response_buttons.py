@@ -199,28 +199,39 @@ def create_reset_button(
         Whether reset was confirmed
     """
     try:
-        if st.button(
-            f"🔄 {label}",
-            key=f"reset_{key_suffix}",
-            type="secondary"
-        ):
-            if confirmation:
-                # Show confirmation in a modal-like way
-                st.warning("⚠️ 確定要重新開始嗎？這將清除所有當前進度。")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    cancel = st.button("取消", key=f"cancel_reset_{key_suffix}")
-                with col2:
-                    confirm = st.button(
-                        "確認重新開始", 
-                        key=f"confirm_reset_{key_suffix}",
-                        type="primary"
-                    )
-                
-                return confirm and not cancel
-            else:
-                return True
+        # Use session state to track confirmation phase
+        confirm_key = f"reset_confirm_{key_suffix}"
+        
+        # Check if we're in confirmation phase
+        if st.session_state.get(confirm_key, False):
+            st.warning("⚠️ 確定要重新開始嗎？這將清除所有當前進度。")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("取消", key=f"cancel_reset_{key_suffix}"):
+                    st.session_state[confirm_key] = False
+                    st.rerun()
+            with col2:
+                if st.button(
+                    "確認重新開始", 
+                    key=f"confirm_reset_{key_suffix}",
+                    type="primary"
+                ):
+                    st.session_state[confirm_key] = False
+                    return True
+            return False
+        else:
+            # Show initial reset button
+            if st.button(
+                f"🔄 {label}",
+                key=f"reset_{key_suffix}",
+                type="secondary"
+            ):
+                if confirmation:
+                    st.session_state[confirm_key] = True
+                    st.rerun()
+                else:
+                    return True
         
         return False
         

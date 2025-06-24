@@ -72,11 +72,17 @@ def route_to_screen():
         
         elif stage == 'trial':
             from ui.screens.trial_screen import display_trial_screen
-            display_trial_screen(session_manager, st.session_state.experiment_controller)
+            # Get experiment controller, it might be None after reset
+            experiment_controller = st.session_state.get('experiment_controller', None)
+            display_trial_screen(session_manager, experiment_controller)
         
         elif stage == 'results':
             from ui.screens.results_screen import display_results_screen
             display_results_screen(session_manager)
+        
+        elif stage == 'stimuli_preview':
+            from ui.screens.stimuli_preview_screen import display_stimuli_preview_screen
+            display_stimuli_preview_screen(session_manager)
         
         elif stage == 'benchmark':
             from ui.screens.benchmark_screen import display_benchmark_screen
