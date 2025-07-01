@@ -52,11 +52,8 @@ def display_welcome_screen(session_manager) -> None:
 
         st.markdown("---")
 
-        # Display options
-        show_trial_feedback = _display_display_options()
-
-        # ADO configuration info
-        _display_ado_info()
+        # Set trial feedback to False (no longer user configurable)
+        show_trial_feedback = False
 
         # Action buttons
         col1, col2 = st.columns(2)
@@ -174,19 +171,6 @@ def _show_current_selection() -> None:
         st.info("👆 請在上方選擇一個刺激圖像")
 
 
-def _display_display_options() -> bool:
-    """Display display options"""
-    st.subheader("顯示選項")
-    return st.checkbox(
-        "顯示試驗回饋（每次回應後顯示 ADO 結果）",
-        value=False,
-        help="如果不勾選，實驗將在回應後直接進行下一個試驗"
-    )
-
-def _display_ado_info() -> None:
-    """Display ADO configuration information"""
-    st.subheader("適應性設計優化 (ADO)")
-    st.info("ADO 預設啟用，將自動選擇 MTF 值以高效率推算您的清晰度知覺閾值")
 
 def _validate_experiment_setup(participant_id: str) -> bool:
     """Validate experiment setup"""
