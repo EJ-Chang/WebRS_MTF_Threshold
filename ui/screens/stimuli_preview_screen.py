@@ -53,7 +53,9 @@ def _display_stimulus_info(stimulus_path: str) -> None:
         'stimuli_img.png': '原始刺激圖',
         'text_img.png': '文字圖像',
         'tw_newsimg.png': '台灣新聞',
-        'us_newsimg.png': '美國新聞'
+        'us_newsimg.png': '美國新聞',
+        'bilingual_news.png': '雙語新聞',
+        'working.png': 'working scenario'
     }
     
     display_name = caption_map.get(stimulus_filename, stimulus_filename.replace('.png', ''))

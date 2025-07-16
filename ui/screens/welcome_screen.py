@@ -109,7 +109,7 @@ def _display_stimulus_selection() -> None:
 def _get_available_images(stimuli_dir: str) -> List[Tuple[str, str]]:
     """Get list of available stimulus images"""
     available_images = []
-    image_files = ["stimuli_img.png", "text_img.png", "tw_newsimg.png", "us_newsimg.png"]
+    image_files = ["stimuli_img.png", "text_img.png", "tw_newsimg.png", "us_newsimg.png", "bilingual_news.png", "working.png"]
 
     for img_file in image_files:
         img_path = os.path.join(stimuli_dir, img_file)
@@ -126,7 +126,9 @@ def _display_image_grid(available_images: List[Tuple[str, str]]) -> None:
         'stimuli_img.png': '原始刺激圖',
         'text_img.png': '文字圖像',
         'tw_newsimg.png': '台灣新聞',
-        'us_newsimg.png': '美國新聞'
+        'us_newsimg.png': '美國新聞',
+        'bilingual_news.png': '雙語新聞',
+        'working.png': 'working scenario'
     }
 
     for i, (img_name, img_path) in enumerate(available_images):
@@ -163,7 +165,9 @@ def _show_current_selection() -> None:
             'stimuli_img.png': '原始刺激圖',
             'text_img.png': '文字圖像',
             'tw_newsimg.png': '台灣新聞',
-            'us_newsimg.png': '美國新聞'
+            'us_newsimg.png': '美國新聞',
+            'bilingual_news.png': '雙語新聞',
+            'working.png': 'working scenario'
         }
         selected_name = caption_map.get(selected_filename, selected_filename.replace('.png', ''))
         st.success(f"✅ 已選擇刺激圖像： **{selected_name}**")
@@ -295,6 +299,8 @@ def _show_stimulus_info(df: pd.DataFrame) -> None:
                 'text_img.png': '文字圖像',
                 'tw_newsimg.png': '台灣新聞',
                 'us_newsimg.png': '美國新聞',
+                'bilingual_news.png': '雙語新聞',
+                'working.png': 'working scenario',
                 'test_pattern': '測試圖案'
             }
             
