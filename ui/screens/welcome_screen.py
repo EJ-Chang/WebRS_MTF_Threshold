@@ -25,11 +25,31 @@ def display_welcome_screen(session_manager) -> None:
         st.markdown("*重構版本 - 模組化架構*")
         st.markdown("---")
 
-        # Add performance testing option
+        # Add developer tools options
         st.sidebar.markdown("### 🔧 Developer Tools")
         if st.sidebar.button("📊 ADO Performance Test"):
             session_manager.set_experiment_stage('benchmark')
             st.rerun()
+        
+        if st.sidebar.button("🎯 Display Calibration"):
+            session_manager.set_experiment_stage('calibration')
+            st.rerun()
+            
+        # Display calibration status in sidebar
+        try:
+            from utils.display_calibration import get_display_calibration
+            calibration = get_display_calibration()
+            status = calibration.get_calibration_status()
+            
+            if status['confidence'] > 0.7:
+                st.sidebar.success(f"✅ Display: {status.get('dpi', 'unknown')}")
+            elif status['confidence'] > 0.3:
+                st.sidebar.warning(f"⚠️ Display: {status.get('dpi', 'unknown')}")
+            else:
+                st.sidebar.error(f"❌ Display: Uncalibrated")
+                
+        except Exception:
+            st.sidebar.info("🎯 Display: Unknown")
         st.write("""
         這是一個使用適應性設計優化 (ADO) 技術的 MTF (調制轉變函數) 清晰度測試實驗。
         您將觀看不同清晰度的圖像，並對其銳利度進行判斷。

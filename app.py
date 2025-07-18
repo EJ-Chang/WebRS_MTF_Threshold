@@ -88,6 +88,10 @@ def route_to_screen():
             from ui.screens.benchmark_screen import display_benchmark_screen
             display_benchmark_screen()
         
+        elif stage == 'calibration':
+            from ui.screens.calibration_screen import display_calibration_screen
+            display_calibration_screen(session_manager)
+        
         else:
             logger.warning(f"Unknown experiment stage: {stage}")
             st.error(f"Unknown experiment stage: {stage}")

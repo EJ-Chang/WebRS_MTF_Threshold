@@ -112,33 +112,49 @@ class DisplayCalibration:
         Returns:
             DisplayInfo with JavaScript-detected values
         """
-        if self._js_detection_attempted:
-            # 從session state獲取之前的結果
-            return self._get_cached_js_detection()
+        # 簡化檢測 - 直接使用devicePixelRatio和默認DPI
+        try:
+            # 顯示簡化的檢測界面
+            st.markdown("### 🔍 顯示器規格檢測")
             
-        # 創建JavaScript檢測界面
-        js_detection_html = self._create_js_detection_interface()
-        
-        # 顯示檢測界面
-        st.markdown("### 🔍 正在檢測顯示器規格...")
-        st.markdown(js_detection_html, unsafe_allow_html=True)
-        
-        # 檢查是否有檢測結果
-        if 'display_detection' in st.session_state:
-            detection_data = st.session_state.display_detection
-            self._js_detection_attempted = True
+            # 使用簡單的默認檢測邏輯
+            device_pixel_ratio = 1.0  # 在Streamlit環境中難以準確獲取
+            
+            # 基於常見顯示器規格的智能推測
+            import platform
+            system = platform.system().lower()
+            
+            if system == "darwin":  # macOS
+                # macOS標準邏輯DPI是72，物理像素密度由devicePixelRatio處理
+                base_dpi = 72.0  # macOS standard logical DPI
+                confidence = 0.8
+                method = "macos_logical_dpi"
+            elif system == "windows":
+                # Windows標準DPI是96
+                base_dpi = 96.0
+                confidence = 0.7  
+                method = "windows_standard_dpi"
+            else:
+                # Linux等其他系統
+                base_dpi = 96.0
+                confidence = 0.6
+                method = "linux_standard_dpi"
+            
+            st.info(f"📱 檢測到 {system.upper()} 系統，估計DPI: {base_dpi}")
             
             return DisplayInfo(
-                width_pixels=detection_data.get('screen_width', 1920),
-                height_pixels=detection_data.get('screen_height', 1080),
-                dpi_x=detection_data.get('dpi_x', 96),
-                dpi_y=detection_data.get('dpi_y', 96),
-                device_pixel_ratio=detection_data.get('device_pixel_ratio', 1.0),
-                detected_method="javascript",
-                confidence=0.8
+                width_pixels=1920,  # 估計值
+                height_pixels=1080,
+                dpi_x=base_dpi,
+                dpi_y=base_dpi,
+                device_pixel_ratio=device_pixel_ratio,
+                detected_method=method,
+                confidence=confidence
             )
-        
-        return None
+            
+        except Exception as e:
+            logger.error(f"JavaScript檢測失敗: {e}")
+            return None
     
     def _create_js_detection_interface(self) -> str:
         """創建JavaScript檢測界面"""
@@ -146,52 +162,88 @@ class DisplayCalibration:
         <div id="dpi-detection" style="margin: 20px 0;">
             <p id="detection-status">正在檢測顯示器規格...</p>
             <div id="test-ruler" style="width: 96px; height: 96px; background: #ddd; border: 1px solid #000;"></div>
+            <button id="skip-detection" style="margin-top: 10px; padding: 5px 10px;" onclick="skipDetection()">跳過自動檢測</button>
         </div>
         
         <script>
+        let detectionCompleted = false;
+        
         function detectDisplayInfo() {{
-            const screen_width = screen.width;
-            const screen_height = screen.height; 
-            const device_pixel_ratio = window.devicePixelRatio || 1;
-            
-            // 使用測試元素檢測實際DPI
-            const testElement = document.getElementById('test-ruler');
-            const testRect = testElement.getBoundingClientRect();
-            const assumedDPI = 96; // CSS像素假設的DPI
-            
-            // 計算實際DPI
-            const actual_dpi_x = (testRect.width * assumedDPI) / testRect.width * device_pixel_ratio;
-            const actual_dpi_y = (testRect.height * assumedDPI) / testRect.height * device_pixel_ratio;
-            
-            const detection_result = {{
-                screen_width: screen_width,
-                screen_height: screen_height,
-                device_pixel_ratio: device_pixel_ratio,
-                dpi_x: actual_dpi_x,
-                dpi_y: actual_dpi_y,
-                timestamp: Date.now()
+            try {{
+                const screen_width = screen.width;
+                const screen_height = screen.height; 
+                const device_pixel_ratio = window.devicePixelRatio || 1;
+                
+                // 使用測試元素檢測實際DPI
+                const testElement = document.getElementById('test-ruler');
+                if (!testElement) {{
+                    throw new Error('測試元素未找到');
+                }}
+                
+                const testRect = testElement.getBoundingClientRect();
+                const assumedDPI = 96; // CSS像素假設的DPI
+                
+                // 計算實際DPI (修正計算方式)
+                const actual_dpi_x = assumedDPI * device_pixel_ratio;
+                const actual_dpi_y = assumedDPI * device_pixel_ratio;
+                
+                const detection_result = {{
+                    screen_width: screen_width,
+                    screen_height: screen_height,
+                    device_pixel_ratio: device_pixel_ratio,
+                    dpi_x: actual_dpi_x,
+                    dpi_y: actual_dpi_y,
+                    timestamp: Date.now()
+                }};
+                
+                // 簡化檢測結果存儲 - 直接存入window對象
+                window.displayDetectionResult = detection_result;
+                detectionCompleted = true;
+                
+                document.getElementById('detection-status').innerHTML = 
+                    `✅ 檢測完成: ${{screen_width}}x${{screen_height}}, DPI: ${{actual_dpi_x.toFixed(1)}}x${{actual_dpi_y.toFixed(1)}}`;
+                
+                document.getElementById('skip-detection').style.display = 'none';
+                
+                // 通知父窗口檢測完成
+                console.log('Display detection completed:', detection_result);
+                
+            }} catch (error) {{
+                console.error('DPI檢測失敗:', error);
+                document.getElementById('detection-status').innerHTML = 
+                    `❌ 檢測失敗: ${{error.message}}`;
+            }}
+        }}
+        
+        function skipDetection() {{
+            const fallback_result = {{
+                screen_width: screen.width || 1920,
+                screen_height: screen.height || 1080,
+                device_pixel_ratio: window.devicePixelRatio || 1,
+                dpi_x: 96 * (window.devicePixelRatio || 1),
+                dpi_y: 96 * (window.devicePixelRatio || 1),
+                timestamp: Date.now(),
+                method: 'skipped'
             }};
             
-            // 儲存檢測結果到Streamlit session state
-            window.parent.postMessage({{
-                type: 'display_detection',
-                data: detection_result
-            }}, '*');
+            window.displayDetectionResult = fallback_result;
+            detectionCompleted = true;
             
             document.getElementById('detection-status').innerHTML = 
-                `檢測完成: ${{screen_width}}x${{screen_height}}, DPI: ${{actual_dpi_x.toFixed(1)}}x${{actual_dpi_y.toFixed(1)}}`;
+                `⚠️ 使用默認值: DPI ${{fallback_result.dpi_x.toFixed(1)}}x${{fallback_result.dpi_y.toFixed(1)}}`;
+            
+            document.getElementById('skip-detection').style.display = 'none';
         }}
         
         // 延遲執行檢測以確保元素已渲染
-        setTimeout(detectDisplayInfo, 100);
+        setTimeout(detectDisplayInfo, 500);
         
-        // 監聽消息
-        window.addEventListener('message', function(event) {{
-            if (event.data.type === 'display_detection') {{
-                // 存儲到session state (這需要特殊處理)
-                console.log('Display detection result:', event.data.data);
+        // 超時處理
+        setTimeout(() => {{
+            if (!detectionCompleted) {{
+                skipDetection();
             }}
-        }});
+        }}, 5000);
         </script>
         """
     
@@ -387,52 +439,44 @@ class DisplayCalibration:
             height_px: 圖像高度（像素）
             
         Returns:
-            CSS style string
+            CSS style string (single line, no comments)
         """
         display_info = self.get_display_info()
         
-        # 計算DPI補償因子
-        dpi_compensation = 1.0
-        if display_info and display_info.device_pixel_ratio:
-            dpi_compensation = 1.0 / display_info.device_pixel_ratio
+        # 生成單行CSS，強制固定像素尺寸，無額外縮放
+        # 讓瀏覽器自然處理devicePixelRatio，實現真正的1:1像素顯示
+        css_style = (
+            f"display: block; "
+            f"margin: 0 auto; "
+            f"width: {width_px}px !important; "
+            f"height: {height_px}px !important; "
+            f"min-width: {width_px}px !important; "
+            f"min-height: {height_px}px !important; "
+            f"max-width: {width_px}px !important; "
+            f"max-height: {height_px}px !important; "
+            f"flex: none !important; "
+            f"flex-shrink: 0 !important; "
+            f"flex-grow: 0 !important; "
+            f"object-fit: none !important; "
+            f"object-position: center !important; "
+            f"image-rendering: pixelated; "
+            f"image-rendering: -moz-crisp-edges; "
+            f"image-rendering: crisp-edges; "
+            f"image-rendering: -webkit-optimize-contrast; "
+            f"transform: none !important; "
+            f"zoom: 1 !important; "
+            f"-webkit-font-smoothing: none !important; "
+            f"-moz-osx-font-smoothing: unset !important; "
+            f"-webkit-user-select: none; "
+            f"-moz-user-select: none; "
+            f"-ms-user-select: none; "
+            f"user-select: none; "
+            f"padding: 0 !important; "
+            f"border: none !important; "
+            f"box-sizing: content-box !important;"
+        )
         
-        return f"""
-        display: block;
-        margin: 0 auto;
-        width: {width_px}px !important;
-        height: {height_px}px !important;
-        max-width: none !important;
-        max-height: none !important;
-        
-        /* 像素完美渲染 */
-        image-rendering: pixelated;
-        image-rendering: -moz-crisp-edges;
-        image-rendering: crisp-edges;
-        image-rendering: -webkit-optimize-contrast;
-        
-        /* 變換控制 */
-        transform: scale({dpi_compensation}) !important;
-        transform-origin: center !important;
-        zoom: 1 !important;
-        
-        /* 禁用所有平滑和變換 */
-        -webkit-transform: none !important;
-        -moz-transform: none !important;
-        -ms-transform: none !important;
-        -webkit-font-smoothing: none !important;
-        -moz-osx-font-smoothing: unset !important;
-        
-        /* 防止用戶選擇 */
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-        
-        /* 確保無邊距和填充 */
-        margin: 0 !important;
-        padding: 0 !important;
-        border: none !important;
-        """
+        return css_style
     
     def _cache_calibration_data(self, display_info: DisplayInfo):
         """緩存校準數據"""

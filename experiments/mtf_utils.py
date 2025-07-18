@@ -14,6 +14,10 @@ import cv2
 import numpy as np
 import time
 import os
+import logging
+
+# 設定日誌
+logger = logging.getLogger(__name__)
 
 def get_project_root():
     """獲取專案根目錄的絕對路徑。
@@ -26,7 +30,7 @@ def get_project_root():
     # 往上一層到專案根目錄
     return os.path.dirname(script_dir)
 
-def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=0.005649806841172989):
+def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=None):
     """對圖片套用指定的 MTF 值
     
     將輸入圖片透過高斯模糊來模擬指定的 MTF (調制傳遞函數) 效果。
@@ -36,7 +40,7 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=0
         image (numpy.ndarray): 輸入圖片陣列，格式為 RGB (H, W, 3)
         mtf_percent (float): MTF 百分比，範圍 0.1-99.9 (不含 0 和 100)
         frequency_lpmm (float, optional): 空間頻率 (線對/毫米)，預設 44.25
-        pixel_size_mm (float, optional): 像素大小 (毫米)，預設約 0.00565
+        pixel_size_mm (float, optional): 像素大小 (毫米)。若為 None，將自動檢測
     
     Returns:
         numpy.ndarray: 處理後的圖片陣列，格式與輸入相同
@@ -61,6 +65,21 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=0
     
     if not (0 < mtf_percent < 100):
         raise ValueError(f"MTF 百分比 ({mtf_percent}) 必須介於 0~100 之間 (不含邊界值)")
+    
+    # 自動檢測像素大小（如果未提供）
+    if pixel_size_mm is None:
+        try:
+            # 延遲導入以避免循環依賴
+            from utils.display_calibration import quick_pixel_size_detection
+            pixel_size_mm = quick_pixel_size_detection()
+            logger.info(f"🔍 自動檢測到像素大小: {pixel_size_mm:.6f} mm")
+        except Exception as e:
+            # 如果檢測失敗，使用原始默認值
+            pixel_size_mm = 0.005649806841172989
+            logger.warning(f"像素大小檢測失敗，使用默認值: {e}")
+            logger.warning(f"📏 使用默認像素大小: {pixel_size_mm:.6f} mm")
+    else:
+        logger.debug(f"📏 使用提供的像素大小: {pixel_size_mm:.6f} mm")
     
     # MTF 百分比轉換為比例
     mtf_ratio = mtf_percent / 100.0
@@ -244,6 +263,157 @@ def benchmark_mtf_processing(image, mtf_values, iterations=10, **mtf_params):
     print(f"範圍：{overall_min:.2f} - {overall_max:.2f} ms")
     
     return results
+
+
+def apply_calibrated_mtf(image, mtf_percent, frequency_lpmm=44.25):
+    """
+    使用自動校準的像素大小進行 MTF 處理
+    
+    這是一個便利函數，專門用於心理物理學實驗中的精確MTF處理。
+    它會自動檢測顯示器的像素大小，確保MTF濾波器的精確性。
+    
+    Args:
+        image (numpy.ndarray): 輸入圖片陣列，格式為 RGB (H, W, 3)
+        mtf_percent (float): MTF 百分比，範圍 0.1-99.9 (不含 0 和 100)
+        frequency_lpmm (float, optional): 空間頻率 (線對/毫米)，預設 44.25
+        
+    Returns:
+        tuple: (processed_image, pixel_size_used)
+            - processed_image: 處理後的圖片陣列
+            - pixel_size_used: 實際使用的像素大小 (mm)
+    """
+    try:
+        from utils.display_calibration import get_display_calibration
+        
+        # 獲取校準的像素大小
+        calibration = get_display_calibration()
+        pixel_size_mm = calibration.calculate_mtf_pixel_size()
+        
+        # 處理圖片
+        processed_image = apply_mtf_to_image(
+            image, 
+            mtf_percent, 
+            frequency_lpmm=frequency_lpmm,
+            pixel_size_mm=pixel_size_mm
+        )
+        
+        logger.info(f"🎯 校準MTF處理完成 - MTF: {mtf_percent}%, 像素: {pixel_size_mm:.6f}mm")
+        
+        return processed_image, pixel_size_mm
+        
+    except Exception as e:
+        logger.error(f"校準MTF處理失敗: {e}")
+        # 使用默認處理作為後備
+        processed_image = apply_mtf_to_image(image, mtf_percent, frequency_lpmm)
+        return processed_image, 0.005649806841172989  # 返回默認值
+
+
+def get_current_pixel_size_info():
+    """
+    獲取當前系統的像素大小信息
+    
+    Returns:
+        dict: 包含像素大小信息的字典
+    """
+    try:
+        from utils.display_calibration import get_display_calibration
+        
+        calibration = get_display_calibration()
+        display_info = calibration.get_display_info()
+        
+        if display_info:
+            return {
+                'pixel_size_mm': display_info.pixel_size_mm,
+                'dpi_x': display_info.dpi_x,
+                'dpi_y': display_info.dpi_y,
+                'resolution': f"{display_info.width_pixels}x{display_info.height_pixels}",
+                'detection_method': display_info.detected_method,
+                'confidence': display_info.confidence,
+                'is_calibrated': True
+            }
+        else:
+            return {
+                'pixel_size_mm': 0.005649806841172989,
+                'dpi_x': 96.0,
+                'dpi_y': 96.0,
+                'resolution': 'unknown',
+                'detection_method': 'default_fallback',
+                'confidence': 0.0,
+                'is_calibrated': False
+            }
+            
+    except Exception as e:
+        logger.warning(f"無法獲取像素大小信息: {e}")
+        return {
+            'pixel_size_mm': 0.005649806841172989,
+            'dpi_x': 96.0,
+            'dpi_y': 96.0,
+            'resolution': 'unknown',
+            'detection_method': 'error_fallback',
+            'confidence': 0.0,
+            'is_calibrated': False,
+            'error': str(e)
+        }
+
+
+def validate_mtf_processing_accuracy(image, mtf_values, frequency_lpmm=44.25):
+    """
+    驗證MTF處理的精確性
+    
+    比較使用默認像素大小和校準像素大小的MTF處理結果。
+    
+    Args:
+        image (numpy.ndarray): 測試圖片
+        mtf_values (list): 要測試的MTF值列表
+        frequency_lpmm (float): 空間頻率
+        
+    Returns:
+        dict: 驗證結果
+    """
+    try:
+        from utils.display_calibration import get_display_calibration
+        
+        calibration = get_display_calibration()
+        calibrated_pixel_size = calibration.calculate_mtf_pixel_size()
+        default_pixel_size = 0.005649806841172989
+        
+        results = {
+            'calibrated_pixel_size': calibrated_pixel_size,
+            'default_pixel_size': default_pixel_size,
+            'pixel_size_difference_percent': abs(calibrated_pixel_size - default_pixel_size) / default_pixel_size * 100,
+            'mtf_comparisons': {}
+        }
+        
+        for mtf_value in mtf_values:
+            # 使用校準像素大小
+            img_calibrated = apply_mtf_to_image(image, mtf_value, frequency_lpmm, calibrated_pixel_size)
+            
+            # 使用默認像素大小  
+            img_default = apply_mtf_to_image(image, mtf_value, frequency_lpmm, default_pixel_size)
+            
+            # 計算差異
+            diff = np.mean(np.abs(img_calibrated.astype(float) - img_default.astype(float)))
+            max_diff = np.max(np.abs(img_calibrated.astype(float) - img_default.astype(float)))
+            
+            results['mtf_comparisons'][mtf_value] = {
+                'mean_difference': diff,
+                'max_difference': max_diff,
+                'difference_percentage': diff / 255.0 * 100
+            }
+        
+        # 總體評估
+        all_diffs = [comp['mean_difference'] for comp in results['mtf_comparisons'].values()]
+        results['overall_assessment'] = {
+            'avg_difference': np.mean(all_diffs),
+            'max_difference': np.max(all_diffs),
+            'calibration_impact': 'significant' if np.mean(all_diffs) > 1.0 else 'minimal'
+        }
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"MTF處理精確性驗證失敗: {e}")
+        return {'error': str(e)}
 
 
 if __name__ == "__main__":
