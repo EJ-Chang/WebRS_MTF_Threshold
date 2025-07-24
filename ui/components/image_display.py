@@ -34,14 +34,14 @@ def crop_image_center(image_array: np.ndarray) -> Optional[np.ndarray]:
 
 def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[Dict[str, Any]]:
     """
-    Display MTF stimulus image for the experiment with fixed sizing
+    Display MTF stimulus image with fixed container size and automatic scaling
     
     Args:
         image_data: Image data (various formats supported)
         caption: Optional caption for the image
         
     Returns:
-        Dict with image dimensions for button positioning
+        Dict with container dimensions for button positioning
     """
     if image_data is None:
         st.error("❌ Stimulus image not available")
@@ -72,7 +72,7 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
             st.error("❌ Invalid image array")
             return None
 
-        # Use original image dimensions without any resizing
+        # Use original image without forcing pixel-perfect cropping
         processed_img = crop_image_center(image_array)
         if processed_img is None:
             processed_img = image_array
@@ -85,103 +85,62 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
         img_pil.save(buffer, format='PNG')
         img_str = base64.b64encode(buffer.getvalue()).decode()
 
-        # Add unique ID for positioning calculation
+        # Add unique ID for CSS targeting
         img_id = f"mtf_img_{int(time.time() * 1000)}"
-        final_h, final_w = processed_img.shape[:2]
+        original_h, original_w = processed_img.shape[:2]
 
-        # 使用校準系統生成像素完美的CSS
-        try:
-            from utils.display_calibration import get_display_calibration
-            calibration = get_display_calibration()
-            calibrated_style = calibration.get_pixel_perfect_css(final_w, final_h)
-            logger.debug(f"✨ 使用校準CSS進行像素完美顯示: {final_w}x{final_h}")
-        except Exception as e:
-            logger.warning(f"校準系統不可用，使用備用CSS: {e}")
-            # 備用的基本像素完美CSS (固定像素尺寸，無縮放)
-            calibrated_style = (
-                f"display: block; "
-                f"margin: 0 auto; "
-                f"width: {final_w}px !important; "
-                f"height: {final_h}px !important; "
-                f"min-width: {final_w}px !important; "
-                f"min-height: {final_h}px !important; "
-                f"max-width: {final_w}px !important; "
-                f"max-height: {final_h}px !important; "
-                f"flex: none !important; "
-                f"flex-shrink: 0 !important; "
-                f"flex-grow: 0 !important; "
-                f"object-fit: none !important; "
-                f"object-position: center !important; "
-                f"image-rendering: pixelated; "
-                f"image-rendering: -moz-crisp-edges; "
-                f"image-rendering: crisp-edges; "
-                f"image-rendering: -webkit-optimize-contrast; "
-                f"zoom: 1 !important; "
-                f"transform: none !important; "
-                f"-webkit-user-select: none; "
-                f"-moz-user-select: none; "
-                f"-ms-user-select: none; "
-                f"user-select: none; "
-                f"box-sizing: content-box !important;"
-            )
+        # Fixed container dimensions (910x1080)
+        container_width = 910
+        container_height = 1080
 
-        # Clean HTML for stimulus display with pixel-perfect sizing and fixed container
+        # Simple container and image styles for automatic scaling
         container_style = (
             f"text-align: center; "
             f"margin: 20px auto; "
-            f"overflow: visible; "
-            f"width: {final_w + 40}px !important; "
-            f"min-width: {final_w + 40}px !important; "
-            f"max-width: {final_w + 40}px !important; "
-            f"height: auto; "
+            f"width: {container_width}px; "
+            f"height: {container_height}px; "
             f"display: flex; "
             f"flex-direction: column; "
             f"align-items: center; "
             f"justify-content: center; "
-            f"flex-shrink: 0 !important; "
-            f"flex-grow: 0 !important; "
             f"position: relative; "
-            f"box-sizing: content-box !important;"
+            f"border: 1px solid #ddd; "  # Optional: visual container boundary
+        )
+
+        # Simple image style with automatic scaling
+        image_style = (
+            f"max-width: 100%; "
+            f"max-height: calc(100% - 40px); "  # Reserve space for caption
+            f"width: auto; "
+            f"height: auto; "
+            f"object-fit: contain; "
+            f"object-position: center; "
+            f"display: block; "
+            f"-webkit-user-select: none; "
+            f"-moz-user-select: none; "
+            f"-ms-user-select: none; "
+            f"user-select: none; "
         )
         
-        # 添加全局CSS重置，確保pixel-perfect顯示不受干擾
+        # Simplified CSS without pixel-perfect constraints
         global_css = f"""
         <style>
-        /* 確保圖像在所有情況下都保持固定像素尺寸 */
         #{img_id} {{
-            width: {final_w}px !important;
-            height: {final_h}px !important;
-            min-width: {final_w}px !important;
-            min-height: {final_h}px !important;
-            max-width: {final_w}px !important;
-            max-height: {final_h}px !important;
-            transform: none !important;
-            zoom: 1 !important;
-            object-fit: none !important;
-            image-rendering: pixelated !important;
+            max-width: 100%;
+            max-height: calc(100% - 40px);
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            object-position: center;
+            display: block;
         }}
-        /* 確保父容器不會干擾 */
+        /* Ensure parent container respects fixed size */
         .stMarkdown > div > div:has(#{img_id}) {{
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            flex-direction: column !important;
-            width: 100% !important;
-        }}
-        /* 防止響應式媒體查詢改變尺寸 */
-        @media (max-width: 768px) {{
-            #{img_id} {{
-                width: {final_w}px !important;
-                height: {final_h}px !important;
-                transform: none !important;
-            }}
-        }}
-        @media (min-width: 769px) {{
-            #{img_id} {{
-                width: {final_w}px !important;
-                height: {final_h}px !important;
-                transform: none !important;
-            }}
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            width: 100%;
         }}
         </style>
         """
@@ -190,32 +149,25 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
         {global_css}
         <div style="{container_style}">
             <img id="{img_id}" src="data:image/png;base64,{img_str}" 
-                 style="{calibrated_style}"
+                 style="{image_style}"
                  draggable="false">
-            <p style="margin: 10px 0; color: #666; font-size: 14px; width: 100%; text-align: center;">{caption}</p>
+            <p style="margin: 10px 0; color: #666; font-size: 14px; text-align: center; position: absolute; bottom: 5px; width: 100%;">{caption}</p>
         </div>
         """
         st.markdown(html_content, unsafe_allow_html=True)
 
-        # Log image display for debugging with calibration info
-        try:
-            from utils.display_calibration import get_display_calibration
-            calibration = get_display_calibration()
-            status = calibration.get_calibration_status()
-            logger.debug(f"🖼️ 顯示圖像: {final_w}x{final_h} 像素 | "
-                       f"校準狀態: {status['status']} | "
-                       f"DPI: {status.get('dpi', 'unknown')} | "
-                       f"像素大小: {status.get('pixel_size_mm', 'unknown'):.6f}mm")
-        except Exception:
-            logger.debug(f"🖼️ 顯示圖像: {final_w}x{final_h} 像素 (無校準信息)")
+        # Log image display for debugging
+        logger.debug(f"🖼️ 顯示圖像: 原始尺寸 {original_w}x{original_h} 像素 | 容器尺寸: {container_width}x{container_height} 像素")
 
-        # Return image dimensions for button positioning
+        # Return container dimensions for button positioning
         return {
-            'display_height': final_h,
-            'center_position': final_h / 2,
-            'original_width': final_w,
-            'original_height': final_h,
-            'responsive_sizing': False
+            'display_height': container_height,
+            'center_position': container_height / 2,
+            'original_width': original_w,
+            'original_height': original_h,
+            'container_width': container_width,
+            'container_height': container_height,
+            'responsive_sizing': True
         }
         
     except Exception as e:

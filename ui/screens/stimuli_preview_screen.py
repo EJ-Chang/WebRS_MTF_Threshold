@@ -6,6 +6,12 @@ import streamlit as st
 import os
 from PIL import Image
 from experiments.mtf_utils import load_and_prepare_image
+from experiments.high_dpi_utils import (
+    load_and_prepare_high_dpi_image, 
+    create_high_dpi_preview, 
+    detect_optimal_dpi_level,
+    get_image_dpi_info
+)
 from ui.components.response_buttons import create_action_button
 from ui.components.image_display import display_mtf_stimulus_image
 from utils.logger import get_logger
@@ -73,51 +79,151 @@ def _display_stimulus_info(stimulus_path: str) -> None:
         logger.warning(f"無法載入原始圖像資訊：{e}")
 
 def _display_cropped_stimulus(stimulus_path: str) -> None:
-    """Display the cropped stimulus image"""
+    """Display the cropped stimulus image with high-DPI preview options"""
     st.subheader("裁剪後的刺激圖像")
-    st.write("這是實驗中將使用的圖像（已裁剪但未套用 MTF 濾鏡）：")
+    
+    # DPI preview mode selection
+    col1, col2, col3 = st.columns([2, 1, 1])
+    
+    with col1:
+        st.write("這是實驗中將使用的圖像（已裁剪但未套用 MTF 濾鏡）：")
+    
+    with col2:
+        enable_high_dpi = st.checkbox("🔍 高DPI預覽", value=False, key="high_dpi_preview_toggle")
+    
+    with col3:
+        if enable_high_dpi:
+            show_compressed = st.checkbox("📏 1/2濃縮", value=True, key="compressed_preview_toggle", 
+                                        help="顯示壓縮版本，在瀏覽器中呈現144 DPI精緻效果")
     
     try:
-        # Load and prepare the image (cropping only, no MTF filter)
-        cropped_img_array = load_and_prepare_image(stimulus_path, use_right_half=True)
+        if enable_high_dpi:
+            # 高DPI模式
+            _display_high_dpi_preview(stimulus_path, show_compressed if 'show_compressed' in locals() else True)
+        else:
+            # 標準模式 (原有邏輯)
+            _display_standard_preview(stimulus_path)
         
-        # Convert numpy array back to PIL Image for display
-        cropped_img_pil = Image.fromarray(cropped_img_array)
-        
-        # Display the cropped image using pixel-perfect display
-        st.markdown("### 📏 像素完美預覽")
-        display_result = display_mtf_stimulus_image(
-            cropped_img_array,
-            caption=f"裁剪後尺寸：{cropped_img_array.shape[1]} × {cropped_img_array.shape[0]} 像素"
-        )
-        
-        if display_result:
-            st.success(f"✅ 圖像以 pixel-perfect 模式顯示：{display_result['original_width']}×{display_result['original_height']} 像素")
-        
-        # 額外顯示校準信息
-        try:
-            from utils.display_calibration import get_display_calibration
-            calibration = get_display_calibration()
-            status = calibration.get_calibration_status()
-            
-            if status['confidence'] > 0.7:
-                st.info(f"🎯 顯示校準: {status.get('dpi', 'unknown')} DPI, 像素大小: {status.get('pixel_size_mm', 'unknown'):.6f}mm")
-            elif status['confidence'] > 0.3:
-                st.warning(f"⚠️ 顯示校準: {status.get('dpi', 'unknown')} DPI (精確度較低)")
-            else:
-                st.error("❌ 顯示未校準 - 建議進行校準以確保pixel-perfect顯示")
-                
-        except Exception as e:
-            logger.warning(f"無法顯示校準信息: {e}")
-        
-        # Display cropping information
-        _display_cropping_info(stimulus_path, cropped_img_array.shape)
+        # Display cropping information (共用)
+        if enable_high_dpi:
+            # 載入高DPI圖片來獲取尺寸信息
+            try:
+                high_dpi_img = load_and_prepare_high_dpi_image(os.path.basename(stimulus_path), use_right_half=True)
+                _display_cropping_info(stimulus_path, high_dpi_img.shape, is_high_dpi=True)
+            except:
+                # 如果高DPI載入失敗，回退到標準模式
+                standard_img = load_and_prepare_image(stimulus_path, use_right_half=True)
+                _display_cropping_info(stimulus_path, standard_img.shape, is_high_dpi=False)
+        else:
+            standard_img = load_and_prepare_image(stimulus_path, use_right_half=True)
+            _display_cropping_info(stimulus_path, standard_img.shape, is_high_dpi=False)
         
     except Exception as e:
         logger.error(f"載入或處理刺激圖像時發生錯誤：{e}")
         st.error(f"無法載入刺激圖像：{e}")
 
-def _display_cropping_info(stimulus_path: str, cropped_shape: tuple) -> None:
+def _display_standard_preview(stimulus_path: str) -> None:
+    """Display standard resolution preview"""
+    # Load and prepare the image (cropping only, no MTF filter)
+    cropped_img_array = load_and_prepare_image(stimulus_path, use_right_half=True)
+    
+    # Display the cropped image using pixel-perfect display
+    st.markdown("### 📏 標準解析度預覽")
+    display_result = display_mtf_stimulus_image(
+        cropped_img_array,
+        caption=f"裁剪後尺寸：{cropped_img_array.shape[1]} × {cropped_img_array.shape[0]} 像素"
+    )
+    
+    if display_result:
+        st.success(f"✅ 圖像以 pixel-perfect 模式顯示：{display_result['original_width']}×{display_result['original_height']} 像素")
+    
+    # 顯示校準信息
+    _display_calibration_info()
+
+def _display_high_dpi_preview(stimulus_path: str, show_compressed: bool = True) -> None:
+    """Display high-DPI preview with optional compression"""
+    try:
+        # 檢測最佳DPI等級
+        optimal_dpi = detect_optimal_dpi_level()
+        
+        # 載入高DPI圖片
+        high_dpi_img = load_and_prepare_high_dpi_image(
+            os.path.basename(stimulus_path), 
+            use_right_half=True,
+            target_dpi=optimal_dpi
+        )
+        
+        # 獲取圖片DPI資訊
+        image_info = get_image_dpi_info(stimulus_path)
+        
+        if show_compressed:
+            # 創建1/2濃縮版本
+            compressed_img = create_high_dpi_preview(
+                high_dpi_img, 
+                scale_factor=0.5, 
+                add_info_overlay=True
+            )
+            
+            st.markdown("### 🔍 高DPI預覽 (144 DPI 精緻效果)")
+            st.info(f"**預覽模式**: 1/2濃縮顯示，瀏覽器將進行高品質放大至144 DPI精緻度")
+            
+            # 顯示濃縮版本
+            display_result = display_mtf_stimulus_image(
+                compressed_img,
+                caption=f"高DPI濃縮: {compressed_img.shape[1]} × {compressed_img.shape[0]} 像素 (原始: {high_dpi_img.shape[1]} × {high_dpi_img.shape[0]})"
+            )
+            
+            if display_result:
+                st.success(f"✅ 高DPI圖像以濃縮模式顯示，瀏覽器將進行精緻化放大")
+                
+        else:
+            # 顯示原始高DPI版本
+            st.markdown("### 🔍 高DPI預覽 (原始尺寸)")
+            st.warning("**注意**: 原始尺寸顯示可能會很大，建議使用1/2濃縮模式")
+            
+            display_result = display_mtf_stimulus_image(
+                high_dpi_img,
+                caption=f"高DPI原始: {high_dpi_img.shape[1]} × {high_dpi_img.shape[0]} 像素"
+            )
+        
+        # 顯示DPI資訊
+        if 'error' not in image_info:
+            st.markdown("### 📊 圖片DPI資訊")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("檢測DPI等級", optimal_dpi.upper())
+            with col2:
+                st.metric("原始DPI", f"{image_info.get('dpi_x', 'unknown')}")
+            with col3:
+                st.metric("圖片尺寸", f"{image_info.get('width', 0)}×{image_info.get('height', 0)}")
+        
+        # 顯示校準信息
+        _display_calibration_info()
+        
+    except Exception as e:
+        logger.error(f"高DPI預覽顯示失敗: {e}")
+        st.error(f"高DPI預覽失敗，回退到標準模式: {e}")
+        _display_standard_preview(stimulus_path)
+
+def _display_calibration_info() -> None:
+    """Display calibration information (shared by both preview modes)"""
+    try:
+        from utils.display_calibration import get_display_calibration
+        calibration = get_display_calibration()
+        status = calibration.get_calibration_status()
+        
+        if status['confidence'] > 0.7:
+            st.info(f"🎯 顯示校準: {status.get('dpi', 'unknown')} DPI, 像素大小: {status.get('pixel_size_mm', 'unknown'):.6f}mm")
+        elif status['confidence'] > 0.3:
+            st.warning(f"⚠️ 顯示校準: {status.get('dpi', 'unknown')} DPI (精確度較低)")
+        else:
+            st.error("❌ 顯示未校準 - 建議進行校準以確保pixel-perfect顯示")
+            
+    except Exception as e:
+        logger.warning(f"無法顯示校準信息: {e}")
+
+def _display_cropping_info(stimulus_path: str, cropped_shape: tuple, is_high_dpi: bool = False) -> None:
     """Display information about the cropping process"""
     stimulus_filename = os.path.basename(stimulus_path).lower()
     
@@ -130,13 +236,21 @@ def _display_cropping_info(stimulus_path: str, cropped_shape: tuple) -> None:
     
     # Display the final dimensions
     height, width = cropped_shape[:2]
-    st.write(f"**最終尺寸：** {width} × {height} 像素")
+    dpi_note = " (高DPI版本)" if is_high_dpi else ""
+    st.write(f"**最終尺寸：** {width} × {height} 像素{dpi_note}")
     
-    # Additional note
-    st.markdown("""
-    > **注意：** 這是經過裁剪但尚未套用 MTF 濾鏡的圖像。  
-    > 在實際實驗中，會根據 ADO 算法動態調整 MTF 值來產生不同清晰度的圖像。
-    """)
+    # Additional notes based on mode
+    if is_high_dpi:
+        st.markdown("""
+        > **高DPI模式注意：** 這是高解析度版本的圖像，經過裁剪但尚未套用 MTF 濾鏡。  
+        > 在實際實驗中，會使用相同的高DPI圖片並根據 ADO 算法動態調整 MTF 值。  
+        > 高DPI版本將確保在144 DPI顯示器上呈現精緻的視覺效果。
+        """)
+    else:
+        st.markdown("""
+        > **標準模式注意：** 這是經過裁剪但尚未套用 MTF 濾鏡的圖像。  
+        > 在實際實驗中，會根據 ADO 算法動態調整 MTF 值來產生不同清晰度的圖像。
+        """)
 
 def _display_navigation_buttons(session_manager) -> None:
     """Display navigation buttons"""
