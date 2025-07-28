@@ -1,5 +1,14 @@
 # MTF處理原理與sigma pixels用途解析
 
+← Back to [[CLAUDE.md]] | Setup: [[HIGH_DPI_SETUP_GUIDE.md]] | Pixel Guide: [[browser_pixel_perfect_guide.md]]
+
+## 🔗 Related Documentation
+- **[[CLAUDE.md]]** - Main project overview and system architecture
+- **[[HIGH_DPI_SETUP_GUIDE.md]]** - High DPI implementation for precise MTF display
+- **[[browser_pixel_perfect_guide.md]]** - Browser optimization for pixel-perfect rendering
+- **[[REFACTORING_PLAN.md]]** - Future improvements to MTF processing
+- **[[image_test/README.md]]** - Testing tools for MTF image validation
+
 基於 `stimuli_preparation/[OE] MTF_test_v0.3.py` 的技術解析
 
 ## MTF核心處理流程

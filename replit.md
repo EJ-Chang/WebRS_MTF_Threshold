@@ -1,5 +1,14 @@
 # WebRS MTF Threshold - Replit Configuration
 
+← Back to [[CLAUDE.md]] | Refactoring: [[REFACTORING_PLAN.md]] | Features: [[ADO_Early_Termination_Analysis.md]]
+
+## 🔗 Related Documentation
+- **[[CLAUDE.md]]** - Complete project overview and development guidance
+- **[[REFACTORING_PLAN.md]]** - Future architecture improvements and optimization plans
+- **[[HIGH_DPI_SETUP_GUIDE.md]]** - Image quality enhancement system
+- **[[ADO_Early_Termination_Analysis.md]]** - ADO functionality analysis
+- **[[MTF_Explanation.md]]** - Technical foundation for MTF processing
+
 ## Overview
 
 This is a modular psychophysics research platform for conducting MTF (Modulation Transfer Function) clarity testing experiments using Adaptive Design Optimization (ADO). The application is built with Streamlit and has been recently refactored from a monolithic 2,174-line application into a clean, modular architecture.

@@ -1,5 +1,13 @@
 # ADO 提早結束功能實作評估報告
 
+← Back to [[CLAUDE.md]] | Architecture: [[replit.md]] | Refactoring: [[REFACTORING_PLAN.md]]
+
+## 🔗 Related Documentation
+- **[[CLAUDE.md]]** - Main project overview and ADO system status
+- **[[replit.md]]** - Current modular architecture and ADO implementation
+- **[[REFACTORING_PLAN.md]]** - Future improvements and optimization plans
+- **[[MTF_Explanation.md]]** - Technical foundation for MTF processing in ADO
+
 **文檔建立日期**: 2025-01-16  
 **分析者**: Claude Code  
 **專案**: WebRS_MTF_Threshold  

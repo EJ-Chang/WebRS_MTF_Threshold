@@ -1,0 +1,288 @@
+/* 圖片顯示測試頁面樣式 */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+    padding: 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+header h1 {
+    color: #007acc;
+    margin-bottom: 10px;
+}
+
+header p {
+    color: #666;
+    font-size: 16px;
+}
+
+.controls {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.controls h3 {
+    margin-bottom: 15px;
+    color: #007acc;
+}
+
+.controls label {
+    display: inline-block;
+    margin-right: 20px;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.controls select, .controls input {
+    margin-left: 10px;
+    padding: 5px 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.info-panel {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border-left: 4px solid #007acc;
+}
+
+.info-panel h3 {
+    color: #007acc;
+    margin-bottom: 10px;
+}
+
+.info-panel p {
+    font-family: monospace;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 5px;
+}
+
+.images-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.image-item {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.image-item h3 {
+    color: #007acc;
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
+.image-wrapper {
+    position: relative;
+    display: inline-block;
+    border: 2px solid #007acc;
+    border-radius: 5px;
+    overflow: visible;
+    background: #fff;
+}
+
+.image-wrapper img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    transition: all 0.3s ease;
+    
+    /* 預設渲染模式 */
+    image-rendering: auto;
+    image-rendering: -webkit-optimize-contrast;
+}
+
+/* 不同縮放模式的樣式 */
+.scale-original {
+    max-width: none !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+.scale-fit-width {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+}
+
+.scale-fit-height {
+    height: 300px !important;
+    width: auto !important;
+    max-width: none !important;
+}
+
+.scale-zoom-50 {
+    transform: scale(0.5);
+    transform-origin: center;
+}
+
+.scale-zoom-200 {
+    transform: scale(2);
+    transform-origin: center;
+}
+
+.image-info {
+    position: absolute;
+    bottom: -30px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 12px;
+    color: #666;
+    background: rgba(255,255,255,0.9);
+    padding: 5px;
+    border-radius: 0 0 5px 5px;
+}
+
+.size-info {
+    font-family: monospace;
+    font-weight: bold;
+}
+
+footer {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+footer h3 {
+    color: #007acc;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.observation-guide {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.guide-section {
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 3px solid #007acc;
+}
+
+.guide-section h4 {
+    color: #007acc;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.guide-section ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+.guide-section li {
+    padding: 3px 0;
+    color: #555;
+    position: relative;
+    padding-left: 20px;
+}
+
+.guide-section li:before {
+    content: "▸";
+    color: #007acc;
+    position: absolute;
+    left: 0;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .images-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .controls label {
+        display: block;
+        margin-bottom: 10px;
+    }
+    
+    .observation-guide {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 圖片渲染模式的特殊樣式 */
+.image-wrapper img[style*="pixelated"] {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+.image-wrapper img[style*="crisp-edges"] {
+    image-rendering: crisp-edges;
+    image-rendering: -moz-crisp-edges;
+}
+
+.image-wrapper img[style*="smooth"] {
+    image-rendering: smooth;
+    image-rendering: -webkit-optimize-contrast;
+}
+
+/* 高對比度模式支援 */
+@media (prefers-contrast: high) {
+    .image-wrapper {
+        border-width: 3px;
+    }
+    
+    .guide-section {
+        border-left-width: 5px;
+    }
+}
+
+/* 高亮顯示模式 */
+.image-wrapper:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,122,204,0.3);
+    transition: all 0.3s ease;
+}
+
+/* 印出模式優化 */
+@media print {
+    body {
+        background: white;
+        padding: 0;
+    }
+    
+    .controls, footer {
+        display: none;
+    }
+    
+    .image-wrapper {
+        border: 1px solid #000;
+        break-inside: avoid;
+    }
+}

@@ -1,4 +1,13 @@
-˙# 高DPI圖片系統設置指南
+# 高DPI圖片系統設置指南
+
+← Back to [[CLAUDE.md]] | Related: [[browser_pixel_perfect_guide.md]] | Technical: [[MTF_Explanation.md]]
+
+## 🔗 Related Documentation
+- **[[CLAUDE.md]]** - Main project overview and system architecture
+- **[[browser_pixel_perfect_guide.md]]** - Complementary browser optimization techniques
+- **[[MTF_Explanation.md]]** - Technical foundation for image processing
+- **[[REFACTORING_PLAN.md]]** - Future improvements to the high DPI system
+- **[[image_test/README.md]]** - Testing tools for validating DPI improvements
 
 ## 概述
 
@@ -177,3 +186,12 @@ print(f"建議DPI等級: {dpi_level}")
 **更新日期**: 2025-07-23  
 **版本**: 1.0  
 **相關文件**: CLAUDE.md
+
+---
+
+## 🔗 Navigation
+- **← Back to [[CLAUDE.md]]** - Return to main project documentation
+- **🌐 Browser Guide: [[browser_pixel_perfect_guide.md]]** - Complementary browser optimization techniques
+- **🧬 Technical Foundation: [[MTF_Explanation.md]]** - Understanding image processing requirements
+- **🔧 Future Plans: [[REFACTORING_PLAN.md]]** - Planned improvements to high DPI system
+- **🧪 Testing: [[image_test/README.md]]** - Validate high DPI improvements

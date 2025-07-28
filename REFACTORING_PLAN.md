@@ -1,5 +1,14 @@
 # REFACTORING_PLAN.md - WebRS_MTF_Threshold 重構計劃
 
+← Back to [[CLAUDE.md]] | Deployment: [[replit.md]] | Image Quality: [[HIGH_DPI_SETUP_GUIDE.md]]
+
+## 🔗 Related Documentation
+- **[[CLAUDE.md]]** - Main project overview and current system architecture
+- **[[replit.md]]** - Current deployment configuration and modular architecture
+- **[[HIGH_DPI_SETUP_GUIDE.md]]** - High DPI image system that addresses pixel-perfect requirements
+- **[[browser_pixel_perfect_guide.md]]** - Browser optimization techniques for image quality
+- **[[MTF_Explanation.md]]** - Technical foundation for image processing requirements
+
 ## 📋 執行摘要 (Executive Summary)
 
 ### 🎯 重構目標
@@ -650,3 +659,12 @@ touch experiments/image/{image_loader.py,pixel_manager.py,display_calibration.py
 **預計完成**: 2025-08-06  
 **審核人**: EJ_CHANG  
 **狀態**: 待執行
+
+---
+
+## 🔗 Navigation
+- **← Back to [[CLAUDE.md]]** - Return to main project documentation
+- **🚀 Deployment: [[replit.md]]** - Current system architecture and deployment details  
+- **🖼️ Image Systems: [[HIGH_DPI_SETUP_GUIDE.md]]** | [[browser_pixel_perfect_guide.md]]** - Current image quality solutions
+- **🧬 Technical Foundation: [[MTF_Explanation.md]]** - Understanding image processing requirements
+- **⚡ Feature Analysis: [[ADO_Early_Termination_Analysis.md]]** - Related functionality assessments
