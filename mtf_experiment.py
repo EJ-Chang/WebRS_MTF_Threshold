@@ -478,10 +478,10 @@ class MTFExperimentManager:
             print(f"Failed to initialize ADO engine: {e}")
             self.ado_engine = None
     
-    def generate_stimulus_image(self, mtf_value: float) -> Optional[str]:
+    def generate_stimulus_image(self, mtf_value: float) -> Optional[np.ndarray]:
         """
         Generate stimulus image with specified MTF value
-        Returns base64 encoded image for web display
+        Returns numpy array for lossless display
         Uses caching for performance improvement
         """
         try:
@@ -491,30 +491,25 @@ class MTFExperimentManager:
             
             # 首先檢查緩存
             cached_image = self.stimulus_cache.get(mtf_value)
-            if cached_image:
+            if cached_image is not None:
                 return cached_image
                 
             # 如果沒有緩存，即時生成
+            print(f"🎯 正在生成 MTF {mtf_value:.1f}% 刺激圖片...")
             img_mtf = apply_mtf_to_image(self.base_image, mtf_value)
             
             if img_mtf is None:
                 print("⚠️ Warning: apply_mtf_to_image returned None")
                 return None
             
-            # Convert to PIL Image
-            img_pil = Image.fromarray(img_mtf)
+            print(f"✅ Generated MTF {mtf_value:.1f}% stimulus image: {img_mtf.shape}")
+            print(f"   原圖範圍: {self.base_image.min()}-{self.base_image.max()}")
+            print(f"   處理後範圍: {img_mtf.min()}-{img_mtf.max()}")
             
-            # Convert to base64 for web display
-            buffer = BytesIO()
-            img_pil.save(buffer, format='PNG')
-            img_str = base64.b64encode(buffer.getvalue()).decode()
+            # 直接存入緩存供未來使用 (儲存 numpy array)
+            self.stimulus_cache.put(mtf_value, img_mtf)
             
-            image_data = f"data:image/png;base64,{img_str}"
-            
-            # 存入緩存供未來使用
-            self.stimulus_cache.put(mtf_value, image_data)
-            
-            return image_data
+            return img_mtf
             
         except Exception as e:
             print(f"⚠️ Error generating stimulus: {e}")

@@ -30,7 +30,7 @@ def get_project_root():
     # 往上一層到專案根目錄
     return os.path.dirname(script_dir)
 
-def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=None):
+def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=3.0, pixel_size_mm=0.169333):
     """對圖片套用指定的 MTF 值
     
     將輸入圖片透過高斯模糊來模擬指定的 MTF (調制傳遞函數) 效果。
@@ -39,8 +39,8 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=N
     Args:
         image (numpy.ndarray): 輸入圖片陣列，格式為 RGB (H, W, 3)
         mtf_percent (float): MTF 百分比，範圍 0.1-99.9 (不含 0 和 100)
-        frequency_lpmm (float, optional): 空間頻率 (線對/毫米)，預設 44.25
-        pixel_size_mm (float, optional): 像素大小 (毫米)。若為 None，將自動檢測
+        frequency_lpmm (float, optional): 空間頻率 (線對/毫米)，預設 3.0
+        pixel_size_mm (float, optional): 像素大小 (毫米)，默認 150 DPI
     
     Returns:
         numpy.ndarray: 處理後的圖片陣列，格式與輸入相同
@@ -66,20 +66,8 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=N
     if not (0 < mtf_percent < 100):
         raise ValueError(f"MTF 百分比 ({mtf_percent}) 必須介於 0~100 之間 (不含邊界值)")
     
-    # 自動檢測像素大小（如果未提供）
-    if pixel_size_mm is None:
-        try:
-            # 延遲導入以避免循環依賴
-            from utils.display_calibration import quick_pixel_size_detection
-            pixel_size_mm = quick_pixel_size_detection()
-            logger.info(f"🔍 自動檢測到像素大小: {pixel_size_mm:.6f} mm")
-        except Exception as e:
-            # 如果檢測失敗，使用原始默認值
-            pixel_size_mm = 0.005649806841172989
-            logger.warning(f"像素大小檢測失敗，使用默認值: {e}")
-            logger.warning(f"📏 使用默認像素大小: {pixel_size_mm:.6f} mm")
-    else:
-        logger.debug(f"📏 使用提供的像素大小: {pixel_size_mm:.6f} mm")
+    # 使用固定像素大小 (150 DPI = 0.169333 mm/pixel)
+    logger.debug(f"📏 使用固定像素大小: {pixel_size_mm:.6f} mm (150 DPI)")
     
     # MTF 百分比轉換為比例
     mtf_ratio = mtf_percent / 100.0
@@ -90,6 +78,19 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=N
     sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
     sigma_pixels = sigma_mm / pixel_size_mm
     
+    # 🔍 調試日誌：顯示所有計算步驟
+    print(f"🔬 MTF調試信息:")
+    print(f"   MTF輸入: {mtf_percent}% -> ratio: {mtf_ratio:.4f}")
+    print(f"   頻率: {f} 線對/毫米")
+    print(f"   像素大小: {pixel_size_mm:.6f} 毫米")
+    print(f"   計算得出 sigma_mm: {sigma_mm:.6f} 毫米")
+    print(f"   計算得出 sigma_pixels: {sigma_pixels:.2f} 像素")
+    
+    # 如果 sigma 太小，強制設定最小值
+    if sigma_pixels < 0.5:
+        print(f"⚠️  Sigma太小 ({sigma_pixels:.2f})，設定為最小值 0.5")
+        sigma_pixels = 0.5
+    
     # 套用高斯模糊
     # 使用 (0, 0) 讓 OpenCV 自動計算核心大小
     img_blurred = cv2.GaussianBlur(
@@ -99,6 +100,8 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=44.25, pixel_size_mm=N
         sigmaY=sigma_pixels,
         borderType=cv2.BORDER_REFLECT
     )
+    
+    print(f"✅ 已套用高斯模糊 sigma={sigma_pixels:.2f} 像素")
     
     return img_blurred
 
@@ -275,7 +278,7 @@ def apply_calibrated_mtf(image, mtf_percent, frequency_lpmm=44.25):
     Args:
         image (numpy.ndarray): 輸入圖片陣列，格式為 RGB (H, W, 3)
         mtf_percent (float): MTF 百分比，範圍 0.1-99.9 (不含 0 和 100)
-        frequency_lpmm (float, optional): 空間頻率 (線對/毫米)，預設 44.25
+        frequency_lpmm (float, optional): 空間頻率 (線對/毫米)，預設 3.0
         
     Returns:
         tuple: (processed_image, pixel_size_used)
