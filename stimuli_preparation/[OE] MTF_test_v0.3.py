@@ -91,9 +91,9 @@ def create_2afc_display(img_rgb, mtf_left, mtf_right, frequency_lpmm, pixel_size
     return combined_img
 
 # ===== 參數設定 =====
-name = "linepair"
-image_path = r"C:\Users\Asus_user\Desktop\Python Code\MTF test pattern\linepair.png"     #圖片位置
-save_path = r"C:\Users\Asus_user\Desktop\Python Code\MTF test pattern\\"    #儲存圖片位置
+name = "us_newsimg"
+image_path = "us_newsimg.png"     #圖片位置
+save_path = "mtf_output/"    #儲存圖片位置
 panel_size = 27     #inch
 panel_resolution_H = 3840     #水平
 panel_resolution_V = 2160     #垂直
