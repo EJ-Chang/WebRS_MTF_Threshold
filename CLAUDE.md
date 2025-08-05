@@ -51,7 +51,7 @@ python main.py
 
 ### Experiment System
 - `experiments/ado_utils.py` - Complete ADO engine implementation
-- `experiments/mtf_utils.py` - MTF image processing utilities
+- `experiments/mtf_utils.py` - **MTF image processing utilities (v0.4 algorithm integrated)**
 - `experiments/high_dpi_utils.py` - High DPI image processing system
 
 ### Data Storage
@@ -61,7 +61,7 @@ python main.py
 
 ### Stimulus Preparation Tools
 - `stimuli_preparation/[OE] MTF_test_v0.4.py` - Advanced MTF stimulus generation with lookup table system
-- `stimuli_preparation/preprocess_mtf_images.py` - Image preprocessing utilities
+- `stimuli_preparation/preprocess_mtf_images.py` - **Image preprocessing utilities (v0.4 algorithm integrated)**
 - `stimuli_preparation/high_dpi/` - High DPI stimulus variants (2x, 3x scaling)
 
 ## Configuration
@@ -126,14 +126,88 @@ python "[OE] MTF_test_v0.4.py"
 - Individual MTF-blurred images: `{name}_{mtf_value}MTF_Blur.png`
 - MTF analysis plots with sigma value annotations
 
+## MTF Algorithm (v0.4) Integration
+
+### 🎯 New MTF Processing System
+
+**Core Enhancements**:
+- **Dynamic Parameter Calculation**: Automatic pixel size and Nyquist frequency computation based on panel specifications
+- **Lookup Table System**: Pre-computed MTF-to-sigma mapping for consistent and efficient processing
+- **Batch Processing**: Optimized for multiple MTF levels generation
+- **Backwards Compatibility**: Maintains support for legacy algorithm
+
+### Key Functions (experiments/mtf_utils.py)
+
+**New v0.4 Functions**:
+```python
+# Dynamic parameter calculation
+calculate_dynamic_mtf_parameters(panel_size=27, panel_resolution_H=3840, panel_resolution_V=2160)
+
+# Lookup table system
+sigma_vs_mtf(f_lpmm, pixel_size_mm, sigma_pixel_max=5)
+lookup_sigma_from_mtf(target_table, mtf_list)
+
+# Enhanced MTF processing with algorithm selection
+apply_mtf_to_image(image, mtf_percent, use_v4_algorithm=True)  # Default: v0.4
+apply_mtf_to_image_v4(image, mtf_percent)  # Direct v0.4 usage
+```
+
+**Algorithm Comparison**:
+| Feature | Legacy Algorithm | v0.4 Algorithm |
+|---------|------------------|----------------|
+| Pixel Size | Fixed (0.169333 mm) | Dynamic calculation |
+| Frequency | Fixed (3.0 lp/mm) | Nyquist frequency |
+| Processing | Direct calculation | Lookup table |
+| Accuracy | Approximation | Physics-based precision |
+
+### Integration Points
+
+**Main Experiment System** (`mtf_experiment.py`):
+- Automatic v0.4 algorithm selection for stimulus generation
+- Dynamic parameter initialization during experiment setup
+- Fallback support for environments without full v0.4 utilities
+
+**Preprocessing Tools** (`preprocess_mtf_images.py`):
+- v0.4 algorithm as default for batch image generation
+- Performance comparison between algorithms
+- Separate output directories for algorithm comparison
+
+### Usage Examples
+
+**Experiment Runtime**:
+```python
+# Automatic v0.4 usage in experiment
+img_stimulus = generate_stimulus_image(mtf_value=45.0)  # Uses v0.4 by default
+```
+
+**Manual Processing**:
+```python
+# Direct v0.4 algorithm usage
+from experiments.mtf_utils import apply_mtf_to_image_v4
+img_processed = apply_mtf_to_image_v4(base_image, 30.0)
+
+# Algorithm comparison
+img_v4 = apply_mtf_to_image(base_image, 30.0, use_v4_algorithm=True)
+img_legacy = apply_mtf_to_image(base_image, 30.0, use_v4_algorithm=False)
+```
+
+**Batch Processing**:
+```bash
+# Generate images with v0.4 algorithm
+cd stimuli_preparation/
+python preprocess_mtf_images.py  # Uses v0.4 by default
+```
+
 ## Important Notes
 
 - **PRODUCTION READY**: v2.2 stable version with modular architecture
+- **MTF ALGORITHM v0.4**: **Integrated advanced MTF processing with dynamic parameters and lookup table system**
 - **ADO System**: Fully functional with Bayesian optimization
 - **High DPI Support**: 144 DPI precision display system implemented
 - **Dual Storage**: CSV + Database backup for data reliability
 - **Environment Standardization**: Pixel-perfect display through controlled environment
 - **Refactoring Complete**: Reduced from monolithic 2,174 lines to clean modular design
+- **Algorithm Compatibility**: Supports both v0.4 (default) and legacy MTF processing methods
 
 ## Documentation Links
 

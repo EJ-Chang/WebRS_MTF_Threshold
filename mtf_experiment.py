@@ -42,29 +42,67 @@ except ImportError as e:
 
 # Import MTF utilities
 try:
-    from experiments.mtf_utils import apply_mtf_to_image, load_and_prepare_image
+    from experiments.mtf_utils import (
+        apply_mtf_to_image, 
+        apply_mtf_to_image_v4,
+        load_and_prepare_image,
+        calculate_dynamic_mtf_parameters,
+        sigma_vs_mtf,
+        lookup_sigma_from_mtf
+    )
     MTF_UTILS_AVAILABLE = True
+    print("✅ Loaded MTF utilities with v0.4 support")
 except ImportError as e:
     print(f"MTF utilities not available: {e}")
     MTF_UTILS_AVAILABLE = False
     
     # Try alternative path
     try:
-        from mtf_utils import apply_mtf_to_image, load_and_prepare_image
+        from mtf_utils import (
+            apply_mtf_to_image, 
+            apply_mtf_to_image_v4,
+            load_and_prepare_image,
+            calculate_dynamic_mtf_parameters,
+            sigma_vs_mtf,
+            lookup_sigma_from_mtf
+        )
         MTF_UTILS_AVAILABLE = True
-        print("✅ Loaded MTF utilities from alternative path")
+        print("✅ Loaded MTF utilities with v0.4 support from alternative path")
     except ImportError as e2:
         print(f"Alternative MTF import also failed: {e2}")
         MTF_UTILS_AVAILABLE = False
     
 # Only provide fallback implementations for MTF utilities if needed
 if not MTF_UTILS_AVAILABLE:
+    def calculate_dynamic_mtf_parameters(panel_size=27, panel_resolution_H=3840, panel_resolution_V=2160):
+        """Fallback dynamic parameter calculation"""
+        panel_resolution_D = (panel_resolution_H**2 + panel_resolution_V**2)**0.5
+        pixel_size_mm = (panel_size * 25.4) / panel_resolution_D
+        nyquist_lpmm = round(1/(2*pixel_size_mm)*2, 2)
+        return pixel_size_mm, nyquist_lpmm
+    
     def apply_mtf_to_image(image, mtf_percent):
-        """Fallback MTF implementation using simple Gaussian blur"""
+        """Fallback MTF implementation using v0.4 algorithm"""
         import cv2
-        # Simple approximation: lower MTF = more blur
-        sigma = (100 - mtf_percent) / 20.0  # Convert MTF% to blur amount
-        return cv2.GaussianBlur(image, (0, 0), sigmaX=sigma, sigmaY=sigma)
+        import numpy as np
+        
+        # Use dynamic parameters
+        pixel_size_mm, frequency_lpmm = calculate_dynamic_mtf_parameters()
+        
+        # Calculate sigma using v0.4 method
+        mtf_ratio = mtf_percent / 100.0
+        if mtf_ratio <= 0 or mtf_ratio >= 1:
+            raise ValueError("MTF ratio must be between 0 and 100 (exclusive)")
+        
+        f = frequency_lpmm
+        sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
+        sigma_pixels = sigma_mm / pixel_size_mm
+        
+        return cv2.GaussianBlur(image, (0, 0), sigmaX=sigma_pixels, sigmaY=sigma_pixels)
+    
+    def apply_mtf_to_image_v4(image, mtf_percent):
+        """Fallback v0.4 MTF implementation"""
+        return apply_mtf_to_image(image, mtf_percent)
     
     def load_and_prepare_image(path, use_right_half=True):
         """Fallback image loading with text image support"""
@@ -415,6 +453,11 @@ class MTFExperimentManager:
         # self.current_trial = 0  # REMOVED: Use session state counters
         self.converged = False
         
+        # Initialize MTF parameters (v0.4 algorithm)
+        self.mtf_pixel_size_mm = None
+        self.mtf_frequency_lpmm = None
+        self._initialize_mtf_parameters()
+        
         # Initialize ADO engine
         self.ado_engine = None
         self.base_image = None
@@ -463,6 +506,28 @@ class MTFExperimentManager:
         
         return rgb_pattern
     
+    def _initialize_mtf_parameters(self):
+        """Initialize MTF parameters using v0.4 algorithm"""
+        try:
+            if MTF_UTILS_AVAILABLE:
+                # 使用動態參數計算
+                self.mtf_pixel_size_mm, self.mtf_frequency_lpmm = calculate_dynamic_mtf_parameters()
+                print(f"✅ MTF v0.4 參數初始化:")
+                print(f"   像素大小: {self.mtf_pixel_size_mm:.6f} mm")
+                print(f"   Nyquist 頻率: {self.mtf_frequency_lpmm} lp/mm")
+            else:
+                # 備用參數
+                self.mtf_pixel_size_mm, self.mtf_frequency_lpmm = calculate_dynamic_mtf_parameters()
+                print(f"✅ MTF v0.4 備用參數:")
+                print(f"   像素大小: {self.mtf_pixel_size_mm:.6f} mm")
+                print(f"   Nyquist 頻率: {self.mtf_frequency_lpmm} lp/mm")
+        except Exception as e:
+            print(f"⚠️ MTF 參數初始化失敗，使用預設值: {e}")
+            # 使用 v0.4 預設值
+            panel_resolution_D = (3840**2 + 2160**2)**0.5
+            self.mtf_pixel_size_mm = (27 * 25.4) / panel_resolution_D
+            self.mtf_frequency_lpmm = round(1/(2*self.mtf_pixel_size_mm)*2, 2)
+
     def _initialize_ado_engine(self):
         """Initialize the ADO engine for MTF testing"""
         try:
@@ -494,15 +559,26 @@ class MTFExperimentManager:
             if cached_image is not None:
                 return cached_image
                 
-            # 如果沒有緩存，即時生成
-            print(f"🎯 正在生成 MTF {mtf_value:.1f}% 刺激圖片...")
-            img_mtf = apply_mtf_to_image(self.base_image, mtf_value)
+            # 如果沒有緩存，即時生成 (使用 v0.4 新算法)
+            print(f"🎯 正在生成 MTF {mtf_value:.1f}% 刺激圖片 (v0.4算法)...")
+            
+            # 使用 v0.4 新算法：優先使用完整版，備用簡化版
+            try:
+                if MTF_UTILS_AVAILABLE:
+                    # 使用完整的 v0.4 算法 (預設開啟動態參數)
+                    img_mtf = apply_mtf_to_image(self.base_image, mtf_value, use_v4_algorithm=True)
+                else:
+                    # 使用備用的 v0.4 算法
+                    img_mtf = apply_mtf_to_image(self.base_image, mtf_value)
+            except Exception as e:
+                print(f"⚠️ v0.4 算法失敗，使用備用方法: {e}")
+                img_mtf = apply_mtf_to_image(self.base_image, mtf_value)
             
             if img_mtf is None:
                 print("⚠️ Warning: apply_mtf_to_image returned None")
                 return None
             
-            print(f"✅ Generated MTF {mtf_value:.1f}% stimulus image: {img_mtf.shape}")
+            print(f"✅ Generated MTF {mtf_value:.1f}% stimulus image (v0.4): {img_mtf.shape}")
             print(f"   原圖範圍: {self.base_image.min()}-{self.base_image.max()}")
             print(f"   處理後範圍: {img_mtf.min()}-{img_mtf.max()}")
             

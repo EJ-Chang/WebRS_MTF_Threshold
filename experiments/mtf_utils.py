@@ -15,6 +15,7 @@ import numpy as np
 import time
 import os
 import logging
+import matplotlib.pyplot as plt
 
 # 設定日誌
 logger = logging.getLogger(__name__)
@@ -30,8 +31,76 @@ def get_project_root():
     # 往上一層到專案根目錄
     return os.path.dirname(script_dir)
 
-def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=3.0, pixel_size_mm=0.169333):
-    """對圖片套用指定的 MTF 值
+def calculate_dynamic_mtf_parameters(panel_size=27, panel_resolution_H=3840, panel_resolution_V=2160):
+    """動態計算 MTF 參數 (來自 [OE] MTF_test_v0.4.py)
+    
+    Args:
+        panel_size (float): 面板對角尺寸 (inches)
+        panel_resolution_H (int): 水平解析度
+        panel_resolution_V (int): 垂直解析度
+        
+    Returns:
+        tuple: (pixel_size_mm, frequency_lpmm)
+    """
+    panel_resolution_D = (panel_resolution_H**2 + panel_resolution_V**2)**0.5
+    pixel_size_mm = (panel_size * 25.4) / panel_resolution_D
+    # 修正：奈奎斯特頻率正確公式是 1/(2*pixel_size_mm)，不應該再乘以 2
+    nyquist_lpmm = round(1/(2*pixel_size_mm), 2)
+    frequency_lpmm = nyquist_lpmm
+    
+    logger.debug(f"動態參數計算: pixel_size={pixel_size_mm:.6f}mm, frequency={frequency_lpmm}lp/mm")
+    return pixel_size_mm, frequency_lpmm
+
+def sigma_vs_mtf(f_lpmm, pixel_size_mm, sigma_pixel_max=5):
+    """建立 sigma_pixel 掃描範圍並計算對應 MTF (來自 [OE] MTF_test_v0.4.py)
+    
+    Args:
+        f_lpmm (float): 空間頻率 (線對/毫米)
+        pixel_size_mm (float): 像素大小 (毫米)
+        sigma_pixel_max (float): sigma 掃描範圍上限
+        
+    Returns:
+        list: [(mtf_percent, sigma_pixel), ...] 對應表
+    """
+    sigma_pixel_range = np.linspace(0, sigma_pixel_max, 10000)
+    sigma_mm = sigma_pixel_range * pixel_size_mm
+
+    # 計算對應 MTF
+    mtf_values = np.exp(-2 * (np.pi**2) * (sigma_mm**2) * (f_lpmm**2))
+    mtf_percent = mtf_values * 100
+
+    # 標記每 5% MTF 所對應的 sigma_pixel
+    target_mtf_levels = np.arange(100, -5, -5)  # 100, 95, ..., 0
+    result_table = []
+
+    logger.debug(f"建立 MTF 查表 (f = {f_lpmm} lp/mm, pixel size = {pixel_size_mm} mm)")
+    for target_mtf in target_mtf_levels:
+        idx = np.argmin(np.abs(mtf_percent - target_mtf))
+        sig_val = sigma_pixel_range[idx]
+        result_table.append((target_mtf, sig_val))
+    
+    return result_table
+
+def lookup_sigma_from_mtf(target_table, mtf_list):
+    """從預計算表中查找對應的 sigma 值 (來自 [OE] MTF_test_v0.4.py)
+    
+    Args:
+        target_table (list): MTF-sigma 對應表
+        mtf_list (list): 要查找的 MTF 值列表
+        
+    Returns:
+        list: [(mtf_value, sigma_pixel), ...] 結果
+    """
+    mtf_values, sigma_values = zip(*target_table)
+    results = []
+    for mtf_target in mtf_list:
+        idx = np.argmin(np.abs(np.array(mtf_values) - mtf_target))
+        sigma_pixel = sigma_values[idx]
+        results.append((mtf_target, sigma_pixel))
+    return results
+
+def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=None, pixel_size_mm=None, use_v4_algorithm=True):
+    """對圖片套用指定的 MTF 值 (支援 v0.4 新算法)
     
     將輸入圖片透過高斯模糊來模擬指定的 MTF (調制傳遞函數) 效果。
     MTF 值越低，圖片越模糊；MTF 值越高，圖片越清晰。
@@ -39,8 +108,9 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=3.0, pixel_size_mm=0.1
     Args:
         image (numpy.ndarray): 輸入圖片陣列，格式為 RGB (H, W, 3)
         mtf_percent (float): MTF 百分比，範圍 0.1-99.9 (不含 0 和 100)
-        frequency_lpmm (float, optional): 空間頻率 (線對/毫米)，預設 3.0
-        pixel_size_mm (float, optional): 像素大小 (毫米)，默認 150 DPI
+        frequency_lpmm (float, optional): 空間頻率 (線對/毫米)，None 時使用動態計算
+        pixel_size_mm (float, optional): 像素大小 (毫米)，None 時使用動態計算
+        use_v4_algorithm (bool): 是否使用 v0.4 新算法，預設 True
     
     Returns:
         numpy.ndarray: 處理後的圖片陣列，格式與輸入相同
@@ -53,7 +123,8 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=3.0, pixel_size_mm=0.1
         >>> import cv2
         >>> img = cv2.imread('test.png')
         >>> img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        >>> img_mtf_50 = apply_mtf_to_image(img_rgb, 50.0)
+        >>> img_mtf_50 = apply_mtf_to_image(img_rgb, 50.0)  # 使用 v0.4 新算法
+        >>> img_mtf_50_old = apply_mtf_to_image(img_rgb, 50.0, use_v4_algorithm=False)  # 使用舊算法
     """
     
     # 輸入驗證
@@ -66,30 +137,62 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=3.0, pixel_size_mm=0.1
     if not (0 < mtf_percent < 100):
         raise ValueError(f"MTF 百分比 ({mtf_percent}) 必須介於 0~100 之間 (不含邊界值)")
     
-    # 使用固定像素大小 (150 DPI = 0.169333 mm/pixel)
-    logger.debug(f"📏 使用固定像素大小: {pixel_size_mm:.6f} mm (150 DPI)")
+    # 選擇算法
+    if use_v4_algorithm:
+        # 使用 v0.4 新算法：動態參數計算 + 查表系統
+        if frequency_lpmm is None or pixel_size_mm is None:
+            pixel_size_mm, frequency_lpmm = calculate_dynamic_mtf_parameters()
+        
+        # 建立查表並查找對應的 sigma 值
+        target_table = sigma_vs_mtf(frequency_lpmm, pixel_size_mm)
+        sigma_mtf_pairs = lookup_sigma_from_mtf(target_table, [mtf_percent])
+        
+        if sigma_mtf_pairs:
+            _, sigma_pixels = sigma_mtf_pairs[0]
+        else:
+            # 備用計算
+            mtf_ratio = mtf_percent / 100.0
+            f = frequency_lpmm
+            sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
+            sigma_pixels = sigma_mm / pixel_size_mm
+        
+        print(f"🔬 MTF調試信息 (v0.4新算法):")
+        print(f"   MTF輸入: {mtf_percent}% (查表系統)")
+        print(f"   動態頻率: {frequency_lpmm} 線對/毫米")
+        print(f"   動態像素大小: {pixel_size_mm:.6f} 毫米")
+        print(f"   查表得出 sigma_pixels: {sigma_pixels:.4f} 像素")
+        
+    else:
+        # 使用舊算法：固定參數
+        if frequency_lpmm is None:
+            frequency_lpmm = 3.0
+        if pixel_size_mm is None:
+            pixel_size_mm = 0.169333
+            
+        logger.debug(f"📏 使用固定像素大小: {pixel_size_mm:.6f} mm (150 DPI)")
+        
+        # MTF 百分比轉換為比例
+        mtf_ratio = mtf_percent / 100.0
+        
+        # 計算對應的高斯模糊 sigma 值
+        # 基於 MTF = exp(-2π²f²σ²) 的公式反推 σ
+        f = frequency_lpmm
+        sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
+        sigma_pixels = sigma_mm / pixel_size_mm
+        
+        print(f"🔬 MTF調試信息 (舊算法):")
+        print(f"   MTF輸入: {mtf_percent}% -> ratio: {mtf_ratio:.4f}")
+        print(f"   頻率: {f} 線對/毫米")
+        print(f"   像素大小: {pixel_size_mm:.6f} 毫米")
+        print(f"   計算得出 sigma_mm: {sigma_mm:.6f} 毫米")
+        print(f"   計算得出 sigma_pixels: {sigma_pixels:.2f} 像素")
     
-    # MTF 百分比轉換為比例
-    mtf_ratio = mtf_percent / 100.0
-    
-    # 計算對應的高斯模糊 sigma 值
-    # 基於 MTF = exp(-2π²f²σ²) 的公式反推 σ
-    f = frequency_lpmm
-    sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
-    sigma_pixels = sigma_mm / pixel_size_mm
-    
-    # 🔍 調試日誌：顯示所有計算步驟
-    print(f"🔬 MTF調試信息:")
-    print(f"   MTF輸入: {mtf_percent}% -> ratio: {mtf_ratio:.4f}")
-    print(f"   頻率: {f} 線對/毫米")
-    print(f"   像素大小: {pixel_size_mm:.6f} 毫米")
-    print(f"   計算得出 sigma_mm: {sigma_mm:.6f} 毫米")
-    print(f"   計算得出 sigma_pixels: {sigma_pixels:.2f} 像素")
-    
-    # 如果 sigma 太小，強制設定最小值
-    if sigma_pixels < 0.5:
-        print(f"⚠️  Sigma太小 ({sigma_pixels:.2f})，設定為最小值 0.5")
-        sigma_pixels = 0.5
+    # 移除最小sigma值限制，讓算法使用正確計算的值
+    # 原本的保護邏輯在修正頻率計算後已不需要
+    if sigma_pixels < 0.1:
+        print(f"⚠️  Sigma值異常小 ({sigma_pixels:.4f})，可能計算有誤")
+    else:
+        print(f"📐 使用計算得出的 sigma_pixels: {sigma_pixels:.4f}")
     
     # 套用高斯模糊
     # 使用 (0, 0) 讓 OpenCV 自動計算核心大小
@@ -101,9 +204,22 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=3.0, pixel_size_mm=0.1
         borderType=cv2.BORDER_REFLECT
     )
     
-    print(f"✅ 已套用高斯模糊 sigma={sigma_pixels:.2f} 像素")
+    algorithm_name = "v0.4新算法" if use_v4_algorithm else "舊算法"
+    print(f"✅ 已套用高斯模糊 ({algorithm_name}) sigma={sigma_pixels:.4f} 像素")
     
     return img_blurred
+
+def apply_mtf_to_image_v4(image, mtf_percent):
+    """便利函數：直接使用 v0.4 新算法處理 MTF
+    
+    Args:
+        image (numpy.ndarray): 輸入圖片陣列
+        mtf_percent (float): MTF 百分比
+        
+    Returns:
+        numpy.ndarray: 處理後的圖片陣列
+    """
+    return apply_mtf_to_image(image, mtf_percent, use_v4_algorithm=True)
 
 
 def normalize_for_psychopy(image):

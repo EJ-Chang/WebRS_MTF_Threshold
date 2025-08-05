@@ -13,66 +13,65 @@ def mtf_to_sigma(mtf_percent, frequency_lpmm, pixel_size_mm):
     sigma_pixels = sigma_mm / pixel_size_mm
     return sigma_pixels
 
-# #拖影模糊
-# def apply_radial_motion_blur(image, max_blur_length, edge_percentage, curve='linear'):
-#     h, w, _ = image.shape
-#     center_x, center_y = w / 2, h / 2
+#拖影模糊
+def apply_radial_motion_blur(image, max_blur_length, edge_percentage, curve='linear'):
+    h, w, _ = image.shape
+    center_x, center_y = w / 2, h / 2
 
-#     output = np.zeros_like(image, dtype=np.float32)
+    output = np.zeros_like(image, dtype=np.float32)
 
-#     y_indices, x_indices = np.indices((h, w))
-#     dx = x_indices - center_x
-#     dy = y_indices - center_y
-#     distances = np.sqrt(dx**2 + dy**2)
-#     angles = np.arctan2(dy, dx)
+    y_indices, x_indices = np.indices((h, w))
+    dx = x_indices - center_x
+    dy = y_indices - center_y
+    distances = np.sqrt(dx**2 + dy**2)
+    angles = np.arctan2(dy, dx)
 
-#     max_distance = np.sqrt(center_x**2 + center_y**2)
-#     start_distance = edge_percentage * max_distance
+    max_distance = np.sqrt(center_x**2 + center_y**2)
+    start_distance = edge_percentage * max_distance
 
-#     ratio = np.clip((distances / max_distance), 0, 1)
-#     if curve == 'quadratic':
-#         ratio = ratio ** 2
+    ratio = np.clip((distances / max_distance), 0, 1)
+    if curve == 'quadratic':
+        ratio = ratio ** 2
 
-#     blur_lengths = (ratio * max_blur_length).astype(np.int32)
+    blur_lengths = (ratio * max_blur_length).astype(np.int32)
 
-#     for i in range(h):
-#         for j in range(w):
-#             length = blur_lengths[i, j]
-#             if length > 0:
-#                 angle = angles[i, j]
-#                 step_x = np.cos(angle)
-#                 step_y = np.sin(angle)
-#                 accum = np.zeros(3, dtype=np.float32)
-#                 count = 0
-#                 for k in range(length):
-#                     x = j + step_x * k
-#                     y = i + step_y * k
-#                     x0, y0 = int(np.floor(x)), int(np.floor(y))
-#                     if 0 <= x0 < w-1 and 0 <= y0 < h-1:
-#                         # bilinear interpolation
-#                         dx_frac = x - x0
-#                         dy_frac = y - y0
-#                         top_left = image[y0, x0]
-#                         top_right = image[y0, x0+1]
-#                         bottom_left = image[y0+1, x0]
-#                         bottom_right = image[y0+1, x0+1]
-#                         top = top_left * (1 - dx_frac) + top_right * dx_frac
-#                         bottom = bottom_left * (1 - dx_frac) + bottom_right * dx_frac
-#                         pixel = top * (1 - dy_frac) + bottom * dy_frac
-#                         accum += pixel
-#                         count += 1
-#                 if count > 0:
-#                     output[i, j] = accum / count
-#                 else:
-#                     output[i, j] = image[i, j]
-#             else:
-#                 output[i, j] = image[i, j]
+    for i in range(h):
+        for j in range(w):
+            length = blur_lengths[i, j]
+            if length > 0:
+                angle = angles[i, j]
+                step_x = np.cos(angle)
+                step_y = np.sin(angle)
+                accum = np.zeros(3, dtype=np.float32)
+                count = 0
+                for k in range(length):
+                    x = j + step_x * k
+                    y = i + step_y * k
+                    x0, y0 = int(np.floor(x)), int(np.floor(y))
+                    if 0 <= x0 < w-1 and 0 <= y0 < h-1:
+                        # bilinear interpolation
+                        dx_frac = x - x0
+                        dy_frac = y - y0
+                        top_left = image[y0, x0]
+                        top_right = image[y0, x0+1]
+                        bottom_left = image[y0+1, x0]
+                        bottom_right = image[y0+1, x0+1]
+                        top = top_left * (1 - dx_frac) + top_right * dx_frac
+                        bottom = bottom_left * (1 - dx_frac) + bottom_right * dx_frac
+                        pixel = top * (1 - dy_frac) + bottom * dy_frac
+                        accum += pixel
+                        count += 1
+                if count > 0:
+                    output[i, j] = accum / count
+                else:
+                    output[i, j] = image[i, j]
+            else:
+                output[i, j] = image[i, j]
 
-#     output = np.clip(output, 0, 255).astype(np.uint8)
-#     return output
+    output = np.clip(output, 0, 255).astype(np.uint8)
+    return output
 
-
-# def scanMTF(frequency_lpmm, pixel_size_mm):
+def scanMTF(frequency_lpmm, pixel_size_mm):
     # 已知參數
     #pixel_size_mm = 0.1        # 例如 0.1 mm/pixel
     #frequency_lpmm = 20                # 頻率 20 lp/mm
@@ -107,8 +106,6 @@ def mtf_to_sigma(mtf_percent, frequency_lpmm, pixel_size_mm):
     plt.ylim(0, 105)
     plt.legend()
     plt.show()
-    return None
-
 
 def sigma_vs_mtf(f_lpmm, pixel_size_mm, sigma_pixel_max=5):
     # 建立 sigma_pixel 掃描範圍
@@ -120,7 +117,7 @@ def sigma_vs_mtf(f_lpmm, pixel_size_mm, sigma_pixel_max=5):
     mtf_percent = mtf_values * 100
 
     # 標記每 5% MTF 所對應的 sigma_pixel
-    target_mtf_levels = np.arange(100, 0, -1)  # 100, 95, ..., 0
+    target_mtf_levels = np.arange(100, -5, -5)  # 100, 95, ..., 0
     result_table = []
 
     print(f"\nMTF (f = {f_lpmm} lp/mm, pixel size = {pixel_size_mm} mm)")
@@ -143,14 +140,9 @@ def lookup_sigma_from_mtf(target_table, mtf_list):
     return results
 
 # ===== 參數設定 =====
-import os
-script_dir = os.path.dirname(os.path.abspath(__file__))
-name = "us_newsimg.png" # 刺激原圖名稱
-image_path = script_dir + "/"     #圖片位置 (使用腳本所在目錄的絕對路徑)
-save_path = script_dir + "/mtf_output/"    #儲存圖片位置 (使用腳本所在目錄的絕對路徑)
-
-# 確保輸出目錄存在
-os.makedirs(save_path, exist_ok=True)
+name = "text_img"
+image_path = r"C:\Users\Asus_user\Desktop\Python Code\MTF test pattern\EJ\text_img.png"     #圖片位置
+save_path = r"C:\Users\Asus_user\Desktop\Python Code\MTF test pattern\EJ\\"    #儲存圖片位置
 panel_size = 27     #inch
 panel_resolution_H = 3840     #水平
 panel_resolution_V = 2160     #垂直
@@ -167,19 +159,18 @@ edge_percentage = 30  # 邊緣拖影範圍百分比
 curve = 'linear'
 
 # ===== 讀取彩色圖像 =====
-full_image_path = image_path + name
-img_bgr = cv2.imread(full_image_path, cv2.IMREAD_COLOR)
+img_bgr = cv2.imread(image_path, cv2.IMREAD_COLOR)
 if img_bgr is None:
-    raise FileNotFoundError(f"Cannot find the image at {full_image_path}")
+    raise FileNotFoundError(f"Cannot find the image at {image_path}")
 
 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
 # ===== 掃描 MTF & sigma_pixel 值 =====
 target_table = sigma_vs_mtf(frequency_lpmm, pixel_size_mm)
-# scanMTF(frequency_lpmm, pixel_size_mm)
+scanMTF(frequency_lpmm, pixel_size_mm)
 
 # ===== 計算 sigma 值 =====
-test1_MTF = [84, 83, 31, 32]  #MTF模糊百分比
+test1_MTF = [80, 60, 40, 20]  #MTF模糊百分比
 
 # ===== 查找每個 MTF 對應的 sigma_pixel =====
 sigma_mtf_pairs = lookup_sigma_from_mtf(target_table, test1_MTF)
@@ -236,9 +227,3 @@ for mtf_value, sigma_mm in sigma_mtf_pairs:
 #ax.axis('off')
 #fig.savefig(save_path + f"{name}_{max_blur_length}p_motion_{test1_MTF}MTF_BlurSimulation.png", dpi=100)
 #plt.close()
-
-
-# 附註：
-# 這是 Tingwei Aug. 4th 提供的 MTF_test_v0.3.py 的修改版本
-# 修改內容： 標題編號，在我這邊是第四版了
-# 修改內容： step size 從 5% 改成 1%
