@@ -59,6 +59,11 @@ python main.py
 - `csv_data_manager.py` - CSV file management and backup
 - `data_manager.py` - Unified data management interface
 
+### Stimulus Preparation Tools
+- `stimuli_preparation/[OE] MTF_test_v0.4.py` - Advanced MTF stimulus generation with lookup table system
+- `stimuli_preparation/preprocess_mtf_images.py` - Image preprocessing utilities
+- `stimuli_preparation/high_dpi/` - High DPI stimulus variants (2x, 3x scaling)
+
 ## Configuration
 
 ### Experiment Settings (config/settings.py)
@@ -77,6 +82,49 @@ python main.py
 - Directory: `stimuli_preparation/high_dpi/`
 - Levels: 2x, 3x resolutions for pixel-perfect display
 - Smart DPI detection and automatic optimization
+
+### MTF Stimulus Generation Tool ([OE] MTF_test_v0.4.py)
+
+**Version Information**: Based on MTF_test_v0.3.py provided by Tingwei (Aug. 4th), enhanced with lookup table system
+
+**Required Configuration Parameters**:
+```python
+# Line 143: Output filename (without extension)
+name = "your_stimulus_name"
+
+# Line 144: Source image file path
+image_path = "path/to/your/source_image.png"
+
+# Line 145: Output directory for generated MTF images
+save_path = "output/directory/"
+
+# Line 146: Display panel size in inches
+panel_size = 27
+
+# Lines 147-148: Panel resolution
+panel_resolution_H = 3840    # Horizontal resolution
+panel_resolution_V = 2160    # Vertical resolution
+
+# Line 173: List of desired MTF percentages for batch generation
+test1_MTF = [80, 60, 40, 20]  # Generates images at these MTF levels
+```
+
+**Key Features**:
+- **Precise MTF Calculation**: Physics-based sigma computation using optical MTF formula
+- **Lookup Table System**: Pre-computed MTF-to-sigma mapping for efficiency
+- **Batch Generation**: Creates multiple MTF-blurred images in single run
+- **Panel-Specific Calibration**: Automatic pixel size and Nyquist frequency calculation
+- **Visual Analysis**: Generates MTF curve plots with marked sigma values
+
+**Usage**:
+```bash
+cd stimuli_preparation/
+python "[OE] MTF_test_v0.4.py"
+```
+
+**Output**:
+- Individual MTF-blurred images: `{name}_{mtf_value}MTF_Blur.png`
+- MTF analysis plots with sigma value annotations
 
 ## Important Notes
 
