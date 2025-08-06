@@ -14,16 +14,13 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# 圖片編碼快取 - 避免重複編碼相同圖片
-_IMAGE_ENCODING_CACHE = {}
-_CACHE_MAX_SIZE = 10  # 最多快取 10 張編碼圖片
-
 
 def numpy_to_lossless_base64(image_array: np.ndarray) -> str:
     """
-    Convert numpy array to lossless base64 string with smart caching.
+    Convert numpy array to lossless base64 string without PIL recompression.
     
-    Uses fast PNG encoding and caches results to avoid re-encoding identical images.
+    This function uses OpenCV's PNG encoding to avoid any quality loss that
+    might occur with PIL's save operations.
     
     Args:
         image_array: Input image array in RGB format (H, W, 3)
@@ -35,52 +32,33 @@ def numpy_to_lossless_base64(image_array: np.ndarray) -> str:
         ValueError: If image array format is invalid
         RuntimeError: If encoding fails
     """
-    global _IMAGE_ENCODING_CACHE
-    
     if not isinstance(image_array, np.ndarray):
         raise ValueError("Input must be a numpy array")
     
     if len(image_array.shape) != 3 or image_array.shape[2] != 3:
         raise ValueError("Image array must be RGB format (H, W, 3)")
     
-    # 建立快取鍵值 - 使用圖片內容的雜湊值
     try:
-        cache_key = hash(image_array.tobytes())
-        
-        # 檢查快取
-        if cache_key in _IMAGE_ENCODING_CACHE:
-            logger.debug(f"🚀 Cache hit: 使用快取編碼結果")
-            return _IMAGE_ENCODING_CACHE[cache_key]
-        
-        # 清理快取如果太大
-        if len(_IMAGE_ENCODING_CACHE) >= _CACHE_MAX_SIZE:
-            # 移除最舊的項目 (簡單的 FIFO)
-            oldest_key = next(iter(_IMAGE_ENCODING_CACHE))
-            del _IMAGE_ENCODING_CACHE[oldest_key]
-            logger.debug(f"🧹 Cache cleanup: 移除舊項目")
-        
-        # 快速編碼
+        # Convert RGB to BGR for OpenCV (OpenCV uses BGR by default)
         image_bgr = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
         
-        # 使用最快的編碼設定
-        encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 1]
+        # Encode as PNG with lossless compression
+        # Use maximum compression (9) for smaller size while maintaining lossless quality
+        encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 9]
         success, encoded_img = cv2.imencode('.png', image_bgr, encode_params)
         
         if not success:
             raise RuntimeError("Failed to encode image as PNG")
         
-        # 轉換為 base64
+        # Convert to base64 string
         img_base64 = base64.b64encode(encoded_img.tobytes()).decode('utf-8')
         
-        # 儲存到快取
-        _IMAGE_ENCODING_CACHE[cache_key] = img_base64
-        
-        logger.debug(f"⚡ Fast encoding: {image_array.shape} → {len(img_base64)} chars (cached)")
+        logger.debug(f"🔄 Lossless encoding: {image_array.shape} → {len(img_base64)} base64 chars")
         return img_base64
         
     except Exception as e:
         logger.error(f"Error in numpy_to_lossless_base64: {e}")
-        raise RuntimeError(f"Fast encoding failed: {e}")
+        raise RuntimeError(f"Lossless encoding failed: {e}")
 
 
 def crop_image_center(image_array: np.ndarray) -> Optional[np.ndarray]:
