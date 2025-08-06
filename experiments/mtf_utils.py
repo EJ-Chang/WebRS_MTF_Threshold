@@ -20,6 +20,10 @@ import matplotlib.pyplot as plt
 # 設定日誌
 logger = logging.getLogger(__name__)
 
+# 全域查表變數 (v0.4 查表系統)
+_MTF_LOOKUP_TABLE = None
+_MTF_TABLE_PARAMETERS = None
+
 def get_project_root():
     """獲取專案根目錄的絕對路徑。
     
@@ -44,8 +48,7 @@ def calculate_dynamic_mtf_parameters(panel_size=27, panel_resolution_H=3840, pan
     """
     panel_resolution_D = (panel_resolution_H**2 + panel_resolution_V**2)**0.5
     pixel_size_mm = (panel_size * 25.4) / panel_resolution_D
-    # 修正：奈奎斯特頻率正確公式是 1/(2*pixel_size_mm)，不應該再乘以 2
-    nyquist_lpmm = round(1/(2*pixel_size_mm), 2)
+    nyquist_lpmm =  round(1/(2*pixel_size_mm)*2, 2)
     frequency_lpmm = nyquist_lpmm
     
     logger.debug(f"動態參數計算: pixel_size={pixel_size_mm:.6f}mm, frequency={frequency_lpmm}lp/mm")
@@ -99,6 +102,98 @@ def lookup_sigma_from_mtf(target_table, mtf_list):
         results.append((mtf_target, sigma_pixel))
     return results
 
+def initialize_mtf_lookup_table(pixel_size_mm=None, frequency_lpmm=None, force_rebuild=False):
+    """初始化全域 MTF 查表 (v0.4 查表系統)
+    
+    Args:
+        pixel_size_mm (float, optional): 像素大小，None 時使用動態計算
+        frequency_lpmm (float, optional): 空間頻率，None 時使用動態計算  
+        force_rebuild (bool): 是否強制重建查表
+        
+    Returns:
+        bool: 是否成功初始化查表
+    """
+    global _MTF_LOOKUP_TABLE, _MTF_TABLE_PARAMETERS
+    
+    # 動態計算參數
+    if pixel_size_mm is None or frequency_lpmm is None:
+        pixel_size_mm, frequency_lpmm = calculate_dynamic_mtf_parameters()
+    
+    # 檢查是否需要重建查表
+    current_params = (pixel_size_mm, frequency_lpmm)
+    if not force_rebuild and _MTF_LOOKUP_TABLE is not None and _MTF_TABLE_PARAMETERS == current_params:
+        logger.debug(f"使用現有查表: pixel_size={pixel_size_mm:.6f}mm, frequency={frequency_lpmm}lp/mm")
+        return True
+    
+    try:
+        # 建立新的查表
+        logger.info(f"建立 MTF 查表: pixel_size={pixel_size_mm:.6f}mm, frequency={frequency_lpmm}lp/mm")
+        _MTF_LOOKUP_TABLE = sigma_vs_mtf(frequency_lpmm, pixel_size_mm)
+        _MTF_TABLE_PARAMETERS = current_params
+        
+        logger.info(f"✅ MTF 查表初始化完成，包含 {len(_MTF_LOOKUP_TABLE)} 個數據點")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ MTF 查表初始化失敗: {e}")
+        _MTF_LOOKUP_TABLE = None
+        _MTF_TABLE_PARAMETERS = None
+        return False
+
+def get_sigma_from_mtf_lookup(mtf_percent):
+    """從全域查表中快速查找 sigma 值
+    
+    Args:
+        mtf_percent (float): MTF 百分比
+        
+    Returns:
+        float: 對應的 sigma_pixel 值，失敗時返回 None
+    """
+    global _MTF_LOOKUP_TABLE
+    
+    if _MTF_LOOKUP_TABLE is None:
+        logger.warning("MTF 查表未初始化，嘗試自動初始化")
+        if not initialize_mtf_lookup_table():
+            return None
+    
+    try:
+        # 使用現有的查找函數
+        results = lookup_sigma_from_mtf(_MTF_LOOKUP_TABLE, [mtf_percent])
+        if results:
+            _, sigma_pixel = results[0]
+            return sigma_pixel
+        else:
+            return None
+            
+    except Exception as e:
+        logger.error(f"查表查找失敗: {e}")
+        return None
+
+def get_mtf_lookup_table_info():
+    """取得目前查表的資訊
+    
+    Returns:
+        dict: 查表資訊，包含參數和狀態
+    """
+    global _MTF_LOOKUP_TABLE, _MTF_TABLE_PARAMETERS
+    
+    if _MTF_LOOKUP_TABLE is None or _MTF_TABLE_PARAMETERS is None:
+        return {
+            'initialized': False,
+            'table_size': 0,
+            'pixel_size_mm': None,
+            'frequency_lpmm': None
+        }
+    
+    pixel_size_mm, frequency_lpmm = _MTF_TABLE_PARAMETERS
+    return {
+        'initialized': True,
+        'table_size': len(_MTF_LOOKUP_TABLE),
+        'pixel_size_mm': pixel_size_mm,
+        'frequency_lpmm': frequency_lpmm,
+        'parameters': _MTF_TABLE_PARAMETERS
+    }
+
 def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=None, pixel_size_mm=None, use_v4_algorithm=True):
     """對圖片套用指定的 MTF 值 (支援 v0.4 新算法)
     
@@ -139,28 +234,37 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=None, pixel_size_mm=No
     
     # 選擇算法
     if use_v4_algorithm:
-        # 使用 v0.4 新算法：動態參數計算 + 查表系統
+        # 使用 v0.4 新算法：動態參數計算 + 全域查表系統
         if frequency_lpmm is None or pixel_size_mm is None:
             pixel_size_mm, frequency_lpmm = calculate_dynamic_mtf_parameters()
         
-        # 建立查表並查找對應的 sigma 值
-        target_table = sigma_vs_mtf(frequency_lpmm, pixel_size_mm)
-        sigma_mtf_pairs = lookup_sigma_from_mtf(target_table, [mtf_percent])
-        
-        if sigma_mtf_pairs:
-            _, sigma_pixels = sigma_mtf_pairs[0]
-        else:
-            # 備用計算
+        # 確保全域查表已初始化
+        if not initialize_mtf_lookup_table(pixel_size_mm, frequency_lpmm):
+            logger.warning("查表初始化失敗，使用直接計算作為備用")
+            # 備用：直接計算
             mtf_ratio = mtf_percent / 100.0
             f = frequency_lpmm
             sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
             sigma_pixels = sigma_mm / pixel_size_mm
+        else:
+            # 使用全域查表進行快速查找
+            sigma_pixels = get_sigma_from_mtf_lookup(mtf_percent)
+            
+            if sigma_pixels is None:
+                logger.warning("查表查找失敗，使用直接計算作為備用")
+                # 備用：直接計算
+                mtf_ratio = mtf_percent / 100.0
+                f = frequency_lpmm
+                sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
+                sigma_pixels = sigma_mm / pixel_size_mm
+            else:
+                # 🚨 關鍵修正：完全符合 MTF test v0.4 的實作
+                # 在 MTF test v0.4 第 212 行，查表得到的值會再除以 pixel_size_mm
+                # 這是為了與 MTF test v0.4 的行為保持完全一致
+                sigma_pixels = sigma_pixels / pixel_size_mm
         
-        print(f"🔬 MTF調試信息 (v0.4新算法):")
-        print(f"   MTF輸入: {mtf_percent}% (查表系統)")
-        print(f"   動態頻率: {frequency_lpmm} 線對/毫米")
-        print(f"   動態像素大小: {pixel_size_mm:.6f} 毫米")
-        print(f"   查表得出 sigma_pixels: {sigma_pixels:.4f} 像素")
+        # 簡化調試輸出 - 只顯示關鍵信息
+        # print(f"🔬 MTF調試信息省略...")  # 用戶要求簡化輸出
         
     else:
         # 使用舊算法：固定參數
@@ -180,17 +284,12 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=None, pixel_size_mm=No
         sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
         sigma_pixels = sigma_mm / pixel_size_mm
         
-        print(f"🔬 MTF調試信息 (舊算法):")
-        print(f"   MTF輸入: {mtf_percent}% -> ratio: {mtf_ratio:.4f}")
-        print(f"   頻率: {f} 線對/毫米")
-        print(f"   像素大小: {pixel_size_mm:.6f} 毫米")
-        print(f"   計算得出 sigma_mm: {sigma_mm:.6f} 毫米")
-        print(f"   計算得出 sigma_pixels: {sigma_pixels:.2f} 像素")
+        # print(f"🔬 舊算法調試信息省略...")  # 用戶要求簡化輸出
     
-    # 移除最小sigma值限制，讓算法使用正確計算的值
-    # 原本的保護邏輯在修正頻率計算後已不需要
+    # 處理邊界情況：非常小的sigma值
     if sigma_pixels < 0.1:
-        print(f"⚠️  Sigma值異常小 ({sigma_pixels:.4f})，可能計算有誤")
+        print(f"⚠️  Sigma值異常小 ({sigma_pixels:.4f})，調整為最小值0.1以避免OpenCV錯誤")
+        sigma_pixels = 0.1
     else:
         print(f"📐 使用計算得出的 sigma_pixels: {sigma_pixels:.4f}")
     
@@ -210,7 +309,10 @@ def apply_mtf_to_image(image, mtf_percent, frequency_lpmm=None, pixel_size_mm=No
     return img_blurred
 
 def apply_mtf_to_image_v4(image, mtf_percent):
-    """便利函數：直接使用 v0.4 新算法處理 MTF
+    """便利函數：直接使用 v0.4 新算法處理 MTF (包含 MTF test v0.4 兼容性修正)
+    
+    這個函數使用 v0.4 算法並套用與 MTF test v0.4 完全相同的 sigma 計算邏輯，
+    確保產生的 MTF 效果與標準實作一致。
     
     Args:
         image (numpy.ndarray): 輸入圖片陣列

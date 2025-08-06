@@ -48,7 +48,9 @@ try:
         load_and_prepare_image,
         calculate_dynamic_mtf_parameters,
         sigma_vs_mtf,
-        lookup_sigma_from_mtf
+        lookup_sigma_from_mtf,
+        initialize_mtf_lookup_table,
+        get_mtf_lookup_table_info
     )
     MTF_UTILS_AVAILABLE = True
     print("✅ Loaded MTF utilities with v0.4 support")
@@ -64,7 +66,9 @@ except ImportError as e:
             load_and_prepare_image,
             calculate_dynamic_mtf_parameters,
             sigma_vs_mtf,
-            lookup_sigma_from_mtf
+            lookup_sigma_from_mtf,
+            initialize_mtf_lookup_table,
+            get_mtf_lookup_table_info
         )
         MTF_UTILS_AVAILABLE = True
         print("✅ Loaded MTF utilities with v0.4 support from alternative path")
@@ -72,71 +76,35 @@ except ImportError as e:
         print(f"Alternative MTF import also failed: {e2}")
         MTF_UTILS_AVAILABLE = False
     
-# Only provide fallback implementations for MTF utilities if needed
+# Strict MTF utilities requirement - no fallback to avoid inconsistency
 if not MTF_UTILS_AVAILABLE:
-    def calculate_dynamic_mtf_parameters(panel_size=27, panel_resolution_H=3840, panel_resolution_V=2160):
-        """Fallback dynamic parameter calculation"""
-        panel_resolution_D = (panel_resolution_H**2 + panel_resolution_V**2)**0.5
-        pixel_size_mm = (panel_size * 25.4) / panel_resolution_D
-        nyquist_lpmm = round(1/(2*pixel_size_mm)*2, 2)
-        return pixel_size_mm, nyquist_lpmm
+    def _mtf_unavailable_error():
+        """Raise clear error when MTF utilities are not available"""
+        raise ImportError(
+            "❌ CRITICAL: experiments/mtf_utils.py is not available!\n"
+            "This is required for proper MTF processing with v0.4 algorithm compatibility.\n"
+            "Please ensure the experiments/mtf_utils.py file exists and is accessible.\n"
+            "No fallback implementation is provided to maintain MTF processing accuracy."
+        )
     
-    def apply_mtf_to_image(image, mtf_percent):
-        """Fallback MTF implementation using v0.4 algorithm"""
-        import cv2
-        import numpy as np
-        
-        # Use dynamic parameters
-        pixel_size_mm, frequency_lpmm = calculate_dynamic_mtf_parameters()
-        
-        # Calculate sigma using v0.4 method
-        mtf_ratio = mtf_percent / 100.0
-        if mtf_ratio <= 0 or mtf_ratio >= 1:
-            raise ValueError("MTF ratio must be between 0 and 100 (exclusive)")
-        
-        f = frequency_lpmm
-        sigma_mm = np.sqrt(-np.log(mtf_ratio) / (2 * (np.pi * f) ** 2))
-        sigma_pixels = sigma_mm / pixel_size_mm
-        
-        return cv2.GaussianBlur(image, (0, 0), sigmaX=sigma_pixels, sigmaY=sigma_pixels)
+    # Replace all MTF functions with error handlers
+    def calculate_dynamic_mtf_parameters(*args, **kwargs):
+        _mtf_unavailable_error()
     
-    def apply_mtf_to_image_v4(image, mtf_percent):
-        """Fallback v0.4 MTF implementation"""
-        return apply_mtf_to_image(image, mtf_percent)
+    def apply_mtf_to_image(*args, **kwargs):
+        _mtf_unavailable_error()
     
-    def load_and_prepare_image(path, use_right_half=True):
-        """Fallback image loading with text image support"""
-        import cv2
-        import os
-        img = cv2.imread(path)
-        if img is not None:
-            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            if use_right_half:
-                # Check image type for cropping strategy
-                image_name = os.path.basename(path).lower()
-                
-                if 'stimuli_img' in image_name:
-                    # Original stimuli_img: take right half (original behavior)
-                    width = img_rgb.shape[1]
-                    mid_point = width // 2
-                    img_rgb = img_rgb[:, mid_point:]
-                else:
-                    # All other images (text_img, tw_newsimg, us_newsimg): take center portion
-                    height, width = img_rgb.shape[:2]
-                    target_width = width // 2  # Target width is half of original
-                    
-                    # Calculate center region boundaries
-                    center_x = width // 2
-                    start_x = center_x - target_width // 2
-                    end_x = start_x + target_width
-                    
-                    # Ensure we don't go out of bounds
-                    start_x = max(0, start_x)
-                    end_x = min(width, end_x)
-                    
-                    img_rgb = img_rgb[:, start_x:end_x]
-            return img_rgb
-        return None
+    def apply_mtf_to_image_v4(*args, **kwargs):
+        _mtf_unavailable_error()
+    
+    def initialize_mtf_lookup_table(*args, **kwargs):
+        _mtf_unavailable_error()
+    
+    def get_mtf_lookup_table_info(*args, **kwargs):
+        _mtf_unavailable_error()
+    
+    def load_and_prepare_image(*args, **kwargs):
+        _mtf_unavailable_error()
 
 # Only create fallback ADO if real ADO is not available
 # THIS SHOULD NOT HAPPEN - we want to force use of real ADO only
@@ -366,7 +334,7 @@ class StimulusCache:
                     
                     self.put(mtf_value, f"data:image/png;base64,{img_str}")
                 except Exception as e:
-                    print(f"預載MTF {mtf_value:.1f}失敗: {e}")
+                    print(f"預載入MTF {mtf_value:.1f}失敗: {e}")
 
 class MTFExperimentManager:
     """Manages MTF ADO experiment for web interface"""
@@ -507,7 +475,7 @@ class MTFExperimentManager:
         return rgb_pattern
     
     def _initialize_mtf_parameters(self):
-        """Initialize MTF parameters using v0.4 algorithm"""
+        """Initialize MTF parameters using v0.4 algorithm and precompute lookup table"""
         try:
             if MTF_UTILS_AVAILABLE:
                 # 使用動態參數計算
@@ -515,24 +483,52 @@ class MTFExperimentManager:
                 print(f"✅ MTF v0.4 參數初始化:")
                 print(f"   像素大小: {self.mtf_pixel_size_mm:.6f} mm")
                 print(f"   Nyquist 頻率: {self.mtf_frequency_lpmm} lp/mm")
+                
+                # 🚀 預建 MTF 查表，提升實驗期間的處理效能
+                print("🔧 正在預建 MTF 查表...")
+                if initialize_mtf_lookup_table(self.mtf_pixel_size_mm, self.mtf_frequency_lpmm):
+                    table_info = get_mtf_lookup_table_info()
+                    print(f"✅ MTF 查表預建完成:")
+                    print(f"   查表大小: {table_info['table_size']} 個數據點")
+                    print(f"   參數一致性: pixel_size={table_info['pixel_size_mm']:.6f}mm, freq={table_info['frequency_lpmm']}lp/mm")
+                    print("   🏎️ 實驗期間將使用快速查表系統")
+                else:
+                    print("⚠️ MTF 查表預建失敗，將使用即時計算")
             else:
                 # 備用參數
                 self.mtf_pixel_size_mm, self.mtf_frequency_lpmm = calculate_dynamic_mtf_parameters()
                 print(f"✅ MTF v0.4 備用參數:")
                 print(f"   像素大小: {self.mtf_pixel_size_mm:.6f} mm")
                 print(f"   Nyquist 頻率: {self.mtf_frequency_lpmm} lp/mm")
+                
+                # 嘗試預建查表
+                try:
+                    if initialize_mtf_lookup_table(self.mtf_pixel_size_mm, self.mtf_frequency_lpmm):
+                        print("✅ 備用環境下成功預建 MTF 查表")
+                    else:
+                        print("⚠️ 備用環境下 MTF 查表預建失敗")
+                except:
+                    print("⚠️ 備用環境下無法使用查表系統")
+                    
         except Exception as e:
             print(f"⚠️ MTF 參數初始化失敗，使用預設值: {e}")
             # 使用 v0.4 預設值
             panel_resolution_D = (3840**2 + 2160**2)**0.5
             self.mtf_pixel_size_mm = (27 * 25.4) / panel_resolution_D
             self.mtf_frequency_lpmm = round(1/(2*self.mtf_pixel_size_mm)*2, 2)
+            
+            # 嘗試使用預設值建立查表
+            try:
+                initialize_mtf_lookup_table(self.mtf_pixel_size_mm, self.mtf_frequency_lpmm)
+                print("✅ 使用預設值成功預建 MTF 查表")
+            except:
+                print("⚠️ 使用預設值時查表預建也失敗")
 
     def _initialize_ado_engine(self):
         """Initialize the ADO engine for MTF testing"""
         try:
             self.ado_engine = ADOEngine(
-                design_space=np.arange(10, 100, 1),  # MTF values from 10% to 99%
+                design_space=None,  # 使用ado_utils.py中的預設設計空間 (95個設計點: 5-99%, 每1%一步)
                 threshold_range=(5, 99),
                 slope_range=(0.05, 5.0),
                 threshold_points=31,
@@ -630,13 +626,18 @@ class MTFExperimentManager:
         if stimulus_image is None:
             print(f"⚠️ Failed to generate stimulus image for MTF {mtf_value:.1f}%")
         
-        # 在背景預載可能的下一個MTF值
-        current_estimates = self.get_current_estimates()
-        if current_estimates and self.base_image is not None:
-            try:
-                self.stimulus_cache.preload_likely_mtf_values(self.base_image, current_estimates)
-            except Exception as e:
-                print(f"Preloading error: {e}")
+        # 停用預載入機制 - 只有在真正需要時才生成MTF圖片
+        # 預載入會在ADO決策後就開始生成圖片，這是不必要的計算
+        # current_estimates = self.get_current_estimates()
+        # if current_estimates and self.base_image is not None:
+        #     try:
+        #         preload_before = len(self.stimulus_cache.cache)
+        #         self.stimulus_cache.preload_likely_mtf_values(self.base_image, current_estimates)
+        #         preload_after = len(self.stimulus_cache.cache)
+        #         if preload_after > preload_before:
+        #             self.preload_count += (preload_after - preload_before)
+        #     except Exception as e:
+        #         print(f"Preloading error: {e}")
         
         # Get stimulus image name for recording
         stimulus_image_name = "unknown"
@@ -691,8 +692,18 @@ class MTFExperimentManager:
         # Update ADO engine
         if self.ado_engine:
             try:
+                # 記錄更新前的狀態
+                pre_update_estimates = self.ado_engine.get_parameter_estimates()
+                print(f"🔄 ADO更新前: Threshold={pre_update_estimates['threshold_mean']:.1f}±{pre_update_estimates['threshold_sd']:.2f}")
+                print(f"   試次: MTF={trial_data['mtf_value']:.1f}%, 回應={'清楚' if response_value==1 else '不清楚'}")
+                
+                # 更新後驗分布
                 self.ado_engine.update_posterior(trial_data['mtf_value'], response_value)
+                
+                # 記錄更新後的狀態
                 estimates = self.ado_engine.get_parameter_estimates()
+                print(f"✅ ADO更新後: Threshold={estimates['threshold_mean']:.1f}±{estimates['threshold_sd']:.2f}")
+                print(f"   總試次數: {len(self.ado_engine.trial_history)}")
                 
                 # Check convergence using session state or trial data length
                 # Import here to avoid circular dependency

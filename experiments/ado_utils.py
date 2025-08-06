@@ -40,7 +40,7 @@ class ADOEngine:
         
         # 設計空間：可選的 MTF 值
         if design_space is None:
-            self.design_space = np.arange(5, 100, 5)  # 5% 到 99%，每 5% 一步
+            self.design_space = np.arange(5, 100, 1)  # 5% 到 99%，每 1% 一步
         else:
             self.design_space = np.array(design_space)
         
@@ -189,10 +189,12 @@ class ADOEngine:
         optimal_idx = np.argmax(utilities)
         optimal_mtf = self.design_space[optimal_idx]
         
-        # 調試輸出已關閉 - 避免console噪音
-        # utility_dict = dict(zip(self.design_space, utilities))
-        # print(f"  Utility values: {utility_dict}")
-        # print(f"  Selected MTF: {optimal_mtf}, Max utility: {utilities[optimal_idx]:.6f}")
+        # 除錯輸出 - 顯示ADO決策過程
+        top_5_indices = np.argsort(utilities)[-5:][::-1]  # 取前5名
+        print(f"🎯 ADO決策 (試次 {len(self.trial_history)+1}):")
+        for i, idx in enumerate(top_5_indices):
+            marker = "★" if idx == optimal_idx else " "
+            print(f"  {marker} MTF {self.design_space[idx]:2.0f}%: utility={utilities[idx]:.4f}")
         
         return float(optimal_mtf)
     
