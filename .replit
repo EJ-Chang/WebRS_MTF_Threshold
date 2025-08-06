@@ -1,10 +1,10 @@
 run = "uv run python main.py"
 entrypoint = "main.py"
-modules = ["python-base-3.13", "postgresql-16"]
+modules = ["postgresql-16", "python-3.11"]
 
 [nix]
 channel = "unstable"
-packages = ["freetype", "glibcLocales", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "pkg-config", "tcl", "tk", "xsimd", "zlib"]
+packages = ["cairo", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "gtk3", "lcms2", "libGL", "libGLU", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "pkg-config", "qhull", "tcl", "tk", "xsimd", "zlib"]
 
 [[ports]]
 localPort = 5000
@@ -28,7 +28,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uv sync && uv run python run.py"
+args = "streamlit run app.py --server.port=5000 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false"
 waitForPort = 5000
 
 [deployment]
