@@ -145,10 +145,13 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
         original_h, original_w = processed_img.shape[:2]
 
         # Adaptive container dimensions based on image size
-        # Add padding for proper spacing
+        # CRITICAL: Never scale images in psychophysical experiments - maintain 1:1 pixel ratio
         padding = 40
-        container_width = min(original_w + padding, 900)  # Max 900px width
-        container_height = min(original_h + padding, 600)  # Max 600px height to avoid button overlap
+        display_width = original_w   # Always use original dimensions for accurate stimulus presentation
+        display_height = original_h  # No scaling allowed in psychophysical experiments
+        
+        container_width = min(display_width + padding, 2000)  # Increased to accommodate 1600x1600 images
+        container_height = min(display_height + padding, 2000)  # Must fit full-size images
 
         # Container style
         container_style = (
@@ -164,10 +167,10 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
             f"border: 1px solid #ddd; "
         )
 
-        # Pixel-perfect image style
+        # Pixel-perfect image style - NEVER scale in psychophysical experiments
         image_style = (
-            f"width: {original_w}px; "  # Absolute pixel dimensions
-            f"height: {original_h}px; "  # No responsive scaling
+            f"width: {display_width}px; "  # Original dimensions - no scaling allowed
+            f"height: {display_height}px; "  # Original dimensions - no scaling allowed
             f"display: block; "
             f"-webkit-user-select: none; "
             f"-moz-user-select: none; "
@@ -175,29 +178,34 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
             f"user-select: none; "
         )
         
-        # Pixel-perfect CSS
+        # Pixel-perfect CSS - CRITICAL: 1:1 pixel ratio for psychophysical accuracy
         pixel_perfect_css = f"""
         <style>
         #{img_id} {{
-            /* Pixel-perfect rendering settings */
+            /* Pixel-perfect rendering settings - NO SCALING ALLOWED */
             image-rendering: pixelated !important;
             image-rendering: crisp-edges !important;
             image-rendering: -webkit-crisp-edges !important;
             image-rendering: -moz-crisp-edges !important;
             max-width: none !important;
             max-height: none !important;
-            width: {original_w}px !important;
-            height: {original_h}px !important;
+            width: {display_width}px !important;  /* Original size - psychophysical accuracy */
+            height: {display_height}px !important;  /* Original size - psychophysical accuracy */
             display: block !important;
             margin: 0 auto !important;
         }}
-        /* Ensure parent container respects fixed size */
+        /* Ensure parent container respects fixed size and prevents overlap */
         .stMarkdown > div > div:has(#{img_id}) {{
             display: flex;
             justify-content: center;
             align-items: center;
             flex-direction: column;
             width: 100%;
+            margin-bottom: 20px;
+        }}
+        /* Add spacing after image containers to prevent button overlap */
+        div:has(#{img_id}) + * {{
+            margin-top: 20px !important;
         }}
         </style>
         """
@@ -214,8 +222,8 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
         st.markdown(html_content, unsafe_allow_html=True)
 
         # Enhanced logging for pixel-perfect display
-        logger.debug(f"🖼️ Pixel-perfect display: {original_w}x{original_h} pixels | Container: {container_width}x{container_height}")
-        logger.debug(f"✨ Applied lossless rendering technology")
+        logger.debug(f"🖼️ Pixel-perfect display: {original_w}x{original_h} (1:1 ratio) | Container: {container_width}x{container_height}")
+        logger.debug(f"✨ Applied lossless rendering with NO scaling (psychophysical accuracy)")
 
         # Return container dimensions for button positioning
         return {
@@ -223,10 +231,14 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
             'center_position': container_height / 2,
             'original_width': original_w,
             'original_height': original_h,
+            'display_width': display_width,  # Same as original - no scaling
+            'display_height': display_height,  # Same as original - no scaling
             'container_width': container_width,
             'container_height': container_height,
-            'pixel_perfect': True,  # New flag to indicate pixel-perfect rendering
-            'lossless_encoding': True  # New flag to indicate lossless encoding
+            'pixel_perfect': True,  # Pixel-perfect 1:1 ratio maintained
+            'lossless_encoding': True,  # No quality loss
+            'no_scaling': True,  # Critical: No scaling applied for psychophysical accuracy
+            'psychophysical_compliance': True  # Ensures experimental validity
         }
         
     except Exception as e:

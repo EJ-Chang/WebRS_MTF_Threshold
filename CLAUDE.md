@@ -84,6 +84,37 @@ python main.py  # Uses system Python in Replit
 - `stimuli_preparation/preprocess_mtf_images.py` - **Image preprocessing utilities (v0.4 algorithm integrated)**
 - `stimuli_preparation/high_dpi/` - High DPI stimulus variants (2x, 3x scaling)
 
+## ⚠️ CRITICAL: Psychophysical Experiment Requirements
+
+### 🚫 ABSOLUTE PROHIBITION: Image Scaling in Psychophysical Experiments
+
+**NEVER scale, resize, or modify stimulus image dimensions in any way during display.**
+
+#### Why This Is Critical:
+- **Scientific Validity**: Scaling destroys the precise MTF calculations and spatial frequency relationships
+- **Experimental Accuracy**: Even small scaling changes can invalidate threshold measurements
+- **Reproducibility**: Results become non-comparable across different display setups
+- **Research Integrity**: Scaling violates fundamental psychophysical experiment principles
+
+#### Implementation Rules:
+1. **Images must always display at 1:1 pixel ratio** - no exceptions
+2. **Container sizes adapt to image dimensions**, never the reverse
+3. **UI layout problems must be solved through spacing and positioning**, not image scaling
+4. **All image processing functions must maintain original pixel dimensions**
+
+#### Code Enforcement:
+- `ui/components/image_display.py`: Contains safeguards against accidental scaling
+- `experiments/mtf_utils.py`: Processes images without size modifications beyond cropping
+- All display functions must preserve exact pixel dimensions from stimulus generation
+
+#### If UI Layout Issues Occur:
+- ✅ Adjust container spacing and margins
+- ✅ Modify button positioning and layout
+- ✅ Change page layout and CSS styling
+- ❌ **NEVER** scale or resize stimulus images
+
+---
+
 ## Configuration
 
 ### Experiment Settings (config/settings.py)

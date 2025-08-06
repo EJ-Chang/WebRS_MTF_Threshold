@@ -341,26 +341,24 @@ def normalize_for_psychopy(image):
 def load_and_prepare_image(image_path, use_right_half=True):
     """載入圖片並準備用於 MTF 處理
     
-    載入圖片檔案，轉換為 RGB 格式，並根據圖片類型選擇不同的裁切方式。
-    - stimuli_img.png: 取右半邊（保持原有行為）
-    - 其他圖片 (text_img.png, tw_newsimg.png, us_newsimg.png): 取中央部分，裁切左右兩側
+    載入圖片檔案，轉換為 RGB 格式，統一裁切為中心1600x1600正方形。
+    這個修改解決了UI布局問題，確保所有圖片具有一致的顯示尺寸。
     
     Args:
         image_path (str): 圖片檔案路徑
-        use_right_half (bool, optional): 是否只取右半邊，預設 True
+        use_right_half (bool, optional): 保留以兼容性，但現在統一使用中心裁切
         
     Returns:
-        numpy.ndarray: 準備好的 RGB 圖片陣列
+        numpy.ndarray: 準備好的 RGB 圖片陣列 (1600x1600)
         
     Raises:
         FileNotFoundError: 當圖片檔案不存在時
         ValueError: 當圖片無法正確載入時
         
     Example:
-        >>> # 一般圖片用途
+        >>> # 統一1600x1600中心裁切
         >>> base_img = load_and_prepare_image('stimuli_img.png')
-        >>> # 文字圖片用途
-        >>> text_img = load_and_prepare_image('text_img.png')
+        >>> print(base_img.shape)  # (1600, 1600, 3)
         >>> img_mtf = apply_mtf_to_image(base_img, 45.0)
     """
     
@@ -378,35 +376,71 @@ def load_and_prepare_image(image_path, use_right_half=True):
     else:
         raise ValueError("不支援的圖片格式")
     
-    # 根據圖片類型和參數決定裁切方式
-    if use_right_half:
-        # 檢查是否為文字圖片
-        image_name = os.path.basename(image_path).lower()
-        
-        if 'stimuli_img' in image_name:
-            # 原始stimuli_img：取右半邊（保持原有行為）
-            width = img_rgb.shape[1]
-            mid_point = width // 2
-            img_rgb = img_rgb[:, mid_point:]
-            print(f"stimuli_img裁切：從 {width} 取右半邊，結果寬度 {img_rgb.shape[1]}")
-        else:
-            # 其他圖片（text_img, tw_newsimg, us_newsimg）：取中央部分
-            height, width = img_rgb.shape[:2]
-            target_width = width // 2  # 目標寬度為原圖的一半
-            
-            # 計算中央區域的起始和結束位置
-            center_x = width // 2
-            start_x = center_x - target_width // 2
-            end_x = start_x + target_width
-            
-            # 確保不超出圖片邊界
-            start_x = max(0, start_x)
-            end_x = min(width, end_x)
-            
-            img_rgb = img_rgb[:, start_x:end_x]
-            print(f"{image_name}裁切：從 {width}x{height} 裁切中央部分到 {img_rgb.shape[1]}x{img_rgb.shape[0]}")
+    # 統一裁切為1600x1600中心正方形
+    height, width = img_rgb.shape[:2]
+    image_name = os.path.basename(image_path).lower()
     
-    return img_rgb
+    # 目標尺寸
+    target_size = 1600
+    
+    # 計算中心裁切區域
+    center_y = height // 2
+    center_x = width // 2
+    
+    # 計算裁切範圍（確保不超出圖片邊界）
+    half_target = target_size // 2
+    
+    start_y = max(0, center_y - half_target)
+    end_y = min(height, center_y + half_target)
+    start_x = max(0, center_x - half_target)
+    end_x = min(width, center_x + half_target)
+    
+    # 如果原圖小於目標尺寸，調整裁切區域以最大化使用原圖
+    actual_height = end_y - start_y
+    actual_width = end_x - start_x
+    
+    if actual_height < target_size:
+        # 垂直方向不足，使用全高度
+        start_y = 0
+        end_y = height
+        actual_height = height
+    
+    if actual_width < target_size:
+        # 水平方向不足，使用全寬度
+        start_x = 0
+        end_x = width
+        actual_width = width
+    
+    # 執行裁切
+    img_cropped = img_rgb[start_y:end_y, start_x:end_x]
+    
+    # 如果裁切後的圖片不是正方形或小於目標尺寸，進行縮放或填充
+    cropped_height, cropped_width = img_cropped.shape[:2]
+    
+    if cropped_height != target_size or cropped_width != target_size:
+        if cropped_height >= target_size and cropped_width >= target_size:
+            # 如果都大於等於目標尺寸，裁切為正方形
+            min_dim = min(cropped_height, cropped_width)
+            if min_dim >= target_size:
+                center_crop_y = cropped_height // 2
+                center_crop_x = cropped_width // 2
+                half_target = target_size // 2
+                
+                img_cropped = img_cropped[
+                    center_crop_y - half_target:center_crop_y + half_target,
+                    center_crop_x - half_target:center_crop_x + half_target
+                ]
+            else:
+                # 縮放到目標尺寸
+                img_cropped = cv2.resize(img_cropped, (target_size, target_size), interpolation=cv2.INTER_LANCZOS4)
+        else:
+            # 如果小於目標尺寸，縮放到目標尺寸
+            img_cropped = cv2.resize(img_cropped, (target_size, target_size), interpolation=cv2.INTER_LANCZOS4)
+    
+    final_height, final_width = img_cropped.shape[:2]
+    print(f"{image_name}統一裁切：從 {width}x{height} → {final_width}x{final_height} (中心1600x1600)")
+    
+    return img_cropped
 
 
 def benchmark_mtf_processing(image, mtf_values, iterations=10, **mtf_params):

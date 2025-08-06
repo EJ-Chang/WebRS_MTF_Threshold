@@ -40,7 +40,7 @@ class ADOEngine:
         
         # 設計空間：可選的 MTF 值
         if design_space is None:
-            self.design_space = np.arange(5, 100, 1)  # 5% 到 99%，每 1% 一步
+            self.design_space = np.arange(1, 100, 1)  # 1% 到 99%，每 1% 一步
         else:
             self.design_space = np.array(design_space)
         

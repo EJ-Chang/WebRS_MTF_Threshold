@@ -171,6 +171,9 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
             caption=f"MTF 值: {mtf_value:.1f}" if session_manager.get_show_trial_feedback() else ""
         )
         
+        # Add spacing to prevent button overlap with image
+        st.markdown("<div style='margin: 30px 0;'></div>", unsafe_allow_html=True)
+        
         # Response buttons (restored to original horizontal layout)
         # Use appropriate trial counter based on mode
         trial_key = session_manager.get_experiment_trial() if not session_manager.is_practice_mode() else session_manager.get_practice_trials_completed()
