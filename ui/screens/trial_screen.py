@@ -8,7 +8,6 @@ from ui.components.response_buttons import create_response_buttons
 from ui.components.progress_indicators import (
     show_trial_progress, show_animated_fixation, show_feedback_message
 )
-from core.async_image_processor import get_async_processor
 from utils.logger import get_logger
 from config.settings import PRACTICE_TRIAL_LIMIT, MAX_TRIALS, MIN_TRIALS, CONVERGENCE_THRESHOLD, STIMULUS_DURATION
 
@@ -53,110 +52,6 @@ def _perform_ado_computation_during_fixation(session_manager, experiment_control
             
     except Exception as e:
         logger.error(f"Error during ADO computation in fixation: {e}")
-
-def _handle_async_image_processing_during_fixation(session_manager, experiment_controller, phase_elapsed):
-    """
-    Handle async image processing during fixation period
-    
-    Args:
-        session_manager: SessionStateManager instance
-        experiment_controller: ExperimentController instance  
-        phase_elapsed: Time elapsed in current fixation phase
-    """
-    try:
-        # Only start async processing early in fixation (within first 0.5 seconds)
-        if phase_elapsed > 0.5:
-            return
-        
-        # Check if we've already started async processing for this trial
-        current_trial = session_manager.get_current_trial()
-        async_task_key = f"async_task_trial_{current_trial}"
-        
-        if async_task_key in st.session_state:
-            # Already started async processing for this trial
-            return
-        
-        # Get the MTF experiment manager
-        if 'mtf_experiment_manager' not in st.session_state:
-            logger.warning("MTF experiment manager not available for async processing")
-            return
-        
-        exp_manager = st.session_state.mtf_experiment_manager
-        
-        # Predict what the next MTF value will be using ADO
-        if hasattr(exp_manager, 'ado_engine') and exp_manager.ado_engine is not None:
-            try:
-                # Get next optimal design value
-                next_mtf_value = exp_manager.ado_engine.get_optimal_design()
-                
-                if next_mtf_value is not None:
-                    # Start async image generation
-                    async_processor = get_async_processor()
-                    task_id = f"trial_{current_trial + 1}_mtf_{next_mtf_value:.1f}"
-                    
-                    async_processor.queue_image_generation(exp_manager, next_mtf_value, task_id)
-                    
-                    # Store task info in session state
-                    st.session_state[async_task_key] = {
-                        'task_id': task_id,
-                        'mtf_value': next_mtf_value,
-                        'started_time': time.time()
-                    }
-                    
-                    logger.info(f"🚀 在 fixation 期間開始異步生成下一試次圖片: MTF {next_mtf_value:.1f}%")
-                
-            except Exception as e:
-                logger.warning(f"無法預測下一試次 MTF 值進行異步處理: {e}")
-        
-    except Exception as e:
-        logger.error(f"Error in async image processing during fixation: {e}")
-
-def _get_stimulus_image_with_async_fallback(trial_data, session_manager):
-    """
-    Get stimulus image, first checking async processor, then falling back to trial data
-    
-    Args:
-        trial_data: Current trial data
-        session_manager: SessionStateManager instance
-        
-    Returns:
-        Stimulus image data
-    """
-    try:
-        current_trial = session_manager.get_current_trial()
-        mtf_value = trial_data.get('mtf_value', 0)
-        
-        # Check if we have async processed image available
-        async_task_key = f"async_task_trial_{current_trial - 1}"  # Previous trial's async task
-        
-        if async_task_key in st.session_state:
-            task_info = st.session_state[async_task_key]
-            task_id = task_info['task_id']
-            expected_mtf = task_info['mtf_value']
-            
-            # Check if the async processed image matches current trial
-            if abs(expected_mtf - mtf_value) < 0.1:  # Allow small tolerance
-                async_processor = get_async_processor()
-                async_image = async_processor.get_processed_image(task_id, timeout=0.1)
-                
-                if async_image is not None:
-                    logger.info(f"✅ 使用異步預處理圖片 MTF {mtf_value:.1f}%")
-                    # Clean up the task info
-                    del st.session_state[async_task_key]
-                    return async_image
-                else:
-                    logger.debug(f"🕐 異步圖片尚未完成，使用同步方法 MTF {mtf_value:.1f}%")
-        
-        # Fallback to original image data
-        image_data = trial_data.get('stimulus_image')
-        if image_data is not None:
-            logger.debug(f"📷 使用試次數據中的圖片 MTF {mtf_value:.1f}%")
-        
-        return image_data
-        
-    except Exception as e:
-        logger.error(f"Error getting stimulus image with async fallback: {e}")
-        return trial_data.get('stimulus_image')
 
 def _log_trial_counter_status(session_manager):
     """Log current trial counter status for debugging"""
@@ -246,17 +141,18 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
         # Show fixation cross
         show_animated_fixation(phase_elapsed)
         
-        # Start async image processing for the next trial during fixation
-        _handle_async_image_processing_during_fixation(session_manager, experiment_controller, phase_elapsed)
+        # ADO computation during fixation has been disabled to ensure timing accuracy
+        # If you need ADO computation, it can be re-enabled in future versions
         
         # Check if fixation period is over
         fixation_duration = session_manager.get_fixation_duration()
         if phase_elapsed >= fixation_duration:
             st.session_state.trial_phase = 'stimulus'
             st.session_state.phase_start_time = current_time
+            # ADO computation flag reset removed (ADO computation disabled)
             st.rerun()
         else:
-            # Auto-refresh every 100ms to update animation and check async processing
+            # Auto-refresh every 100ms to update animation
             time.sleep(0.1)
             st.rerun()
         
@@ -267,8 +163,7 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
         # Show stimulus image
         st.subheader("請判斷圖像是否清楚")
         
-        # Check if we have an async processed image available first
-        image_data = _get_stimulus_image_with_async_fallback(trial_data, session_manager)
+        image_data = trial_data.get('stimulus_image')
         mtf_value = trial_data.get('mtf_value', 0)
         
         display_mtf_stimulus_image(

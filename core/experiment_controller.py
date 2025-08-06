@@ -7,7 +7,6 @@ import time
 from datetime import datetime
 from typing import Dict, Any, Optional
 from core.session_manager import SessionStateManager
-from core.async_image_processor import get_async_processor
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -89,51 +88,6 @@ class ExperimentController:
         except Exception as e:
             logger.error(f"Error preparing trial: {e}")
             return None
-    
-    def _enhance_trial_data_with_async_image(self, trial_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Enhance trial data with async processed image if available
-        
-        Args:
-            trial_data: Original trial data
-            
-        Returns:
-            Enhanced trial data with async image if available
-        """
-        try:
-            if not trial_data:
-                return trial_data
-            
-            current_trial = self.session.get_current_trial()
-            mtf_value = trial_data.get('mtf_value', 0)
-            
-            # Check for async processed image
-            async_task_key = f"async_task_trial_{current_trial}"
-            
-            if async_task_key in st.session_state:
-                task_info = st.session_state[async_task_key]
-                task_id = task_info['task_id']
-                expected_mtf = task_info['mtf_value']
-                
-                # Check if MTF values match (within tolerance)
-                if abs(expected_mtf - mtf_value) < 0.1:
-                    async_processor = get_async_processor()
-                    async_image = async_processor.get_processed_image(task_id, timeout=0.5)
-                    
-                    if async_image is not None:
-                        # Replace stimulus image with async processed one
-                        trial_data['stimulus_image'] = async_image
-                        logger.info(f"✅ 使用異步預處理圖片增強試次數據 MTF {mtf_value:.1f}%")
-                        # Clean up task info
-                        del st.session_state[async_task_key]
-                    else:
-                        logger.debug(f"🕐 異步圖片未完成，保留原始試次數據 MTF {mtf_value:.1f}%")
-            
-            return trial_data
-            
-        except Exception as e:
-            logger.error(f"Error enhancing trial data with async image: {e}")
-            return trial_data
     
     def process_response(self, response: str, response_time: Optional[float] = None) -> bool:
         """
