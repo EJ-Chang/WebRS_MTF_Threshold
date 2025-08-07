@@ -6,13 +6,13 @@ import time
 from ui.components.image_display import display_mtf_stimulus_image
 from ui.components.response_buttons import create_response_buttons
 from ui.components.progress_indicators import (
-    show_trial_progress, show_animated_fixation, show_css_fixation_with_timer, show_feedback_message
+    show_trial_progress, show_animated_fixation, show_feedback_message
 )
 try:
-    from ui.components.gif_animations import show_gif_fixation_with_timer
-    GIF_ANIMATION_AVAILABLE = True
+    from ui.components.progress_indicators import show_resumable_css_fixation
+    CSS_ANIMATION_AVAILABLE = True
 except ImportError:
-    GIF_ANIMATION_AVAILABLE = False
+    CSS_ANIMATION_AVAILABLE = False
 from utils.logger import get_logger
 from config.settings import (
     PRACTICE_TRIAL_LIMIT, MAX_TRIALS, MIN_TRIALS, CONVERGENCE_THRESHOLD, STIMULUS_DURATION,
@@ -272,128 +272,76 @@ def display_trial_screen(session_manager, experiment_controller) -> None:
         st.error(f"Error in trial screen: {e}")
 
 def _display_trial_content(trial_data, session_manager, experiment_controller):
-    """Display the actual trial content"""
+    """Display the actual trial content using a stable placeholder to prevent rendering issues."""
     
-    # Show fixation or stimulus based on timing
+    # Create a single, stable placeholder for all trial content.
+    placeholder = st.empty()
+
+    # Initialize trial phase and timer if they don't exist.
     if 'trial_phase' not in st.session_state:
         st.session_state.trial_phase = 'fixation'
         st.session_state.phase_start_time = time.time()
     
-    # Safely calculate phase elapsed time with None check
+    # Calculate elapsed time.
     current_time = time.time()
-    phase_start_time = st.session_state.get('phase_start_time')
-    if phase_start_time is not None:
-        phase_elapsed = current_time - phase_start_time
-    else:
-        # Fallback: reset phase start time to now
-        logger.warning("phase_start_time is None, resetting to current time")
-        st.session_state.phase_start_time = current_time
-        phase_elapsed = 0.0
+    phase_start_time = st.session_state.get('phase_start_time', current_time)
+    phase_elapsed = current_time - phase_start_time
     
+    # --- Fixation Phase --- #
     if st.session_state.trial_phase == 'fixation':
-        fixation_duration = session_manager.get_fixation_duration()
-        
-        # Choose animation type based on configuration
-        if phase_elapsed < 0.1:  # Only initialize animation once at the beginning
-            animation_started = False
+        with placeholder.container():
+            fixation_duration = session_manager.get_fixation_duration()
             
-            if FIXATION_ANIMATION_TYPE == "gif" and GIF_ANIMATION_AVAILABLE:
-                try:
-                    show_gif_fixation_with_timer(fixation_duration, show_progress=True)
-                    logger.debug(f"🎬 Started GIF fixation animation for {fixation_duration:.1f}s")
-                    animation_started = True
-                except Exception as e:
-                    logger.warning(f"GIF animation failed: {e}, falling back to CSS")
-            
-            if not animation_started and FIXATION_ANIMATION_TYPE in ["css", "gif"]:
-                # Use CSS animation (default or fallback)
-                show_css_fixation_with_timer(fixation_duration, show_progress=True)
-                logger.debug(f"🎬 Started CSS fixation animation for {fixation_duration:.1f}s")
-                animation_started = True
-            
-            if not animation_started:
-                # Legacy fallback
-                show_animated_fixation(phase_elapsed)
-                logger.debug(f"🎬 Using legacy fixation animation")
-        
-        # Pregenerate next image during fixation to improve performance
-        # This utilizes the 3-second fixation window for image preparation
-        if phase_elapsed >= 1.5:  # Start pregeneration after 1.5 seconds (avoid early animation period)
-            _pregenerate_next_image_during_fixation(session_manager, experiment_controller)
-        
-        # Check if fixation period is over
-        if phase_elapsed >= fixation_duration:
-            st.session_state.trial_phase = 'stimulus'
-            st.session_state.phase_start_time = current_time
-            st.rerun()
-        else:
-            # Refresh rate depends on animation type
-            if FIXATION_ANIMATION_TYPE == "legacy":
-                time.sleep(0.1)  # Frequent updates needed for legacy animation
+            # Display the legacy fixation cross and its timer.
+            show_animated_fixation(phase_elapsed)
+
+            # Check if the fixation period is over.
+            if phase_elapsed >= fixation_duration:
+                # Transition to the stimulus phase.
+                st.session_state.trial_phase = 'stimulus'
+                st.session_state.phase_start_time = time.time()
+                st.rerun() # Rerun to display the stimulus.
             else:
-                time.sleep(0.2)  # Less frequent updates for CSS/GIF animations
-            st.rerun()
-        
-        # Explicitly return to prevent any UI elements below from rendering during fixation
+                # Continue the countdown.
+                time.sleep(0.1)
+                st.rerun()
         return
-    
+
+    # --- Stimulus Phase --- #
     elif st.session_state.trial_phase == 'stimulus':
-        # Use staged loading for better UX: header → progress → placeholder → controls → image
-        _display_stimulus_with_staged_loading(trial_data, session_manager, experiment_controller)
+        with placeholder.container():
+            _display_stimulus_with_staged_loading(trial_data, session_manager, experiment_controller)
         
-        # Get response data from staged loading
         response_data = st.session_state.get('trial_response_data', {'left_pressed': False, 'right_pressed': False})
         left_pressed = response_data['left_pressed']
         right_pressed = response_data['right_pressed']
         
-        # Process response
         if left_pressed or right_pressed:
             response = "not_clear" if left_pressed else "clear"
-            # Safely calculate response time with None check
-            phase_start_time = st.session_state.get('phase_start_time')
-            if phase_start_time is not None:
-                response_time = time.time() - phase_start_time
-            else:
-                logger.warning("phase_start_time is None, using default response time")
-                response_time = 0.5  # Default fallback response time
+            response_time = time.time() - st.session_state.get('phase_start_time', current_time)
             
-            # Process the response
             if experiment_controller.process_response(response, response_time):
-                # Save trial data using simplified practice/experiment logic
                 trial_results = session_manager.get_trial_results()
                 if trial_results:
                     latest_result = trial_results[-1]
-                    
-                    # Double-check practice mode using session manager state as primary source
                     is_practice_trial = session_manager.is_practice_mode()
                     trial_number = latest_result.get('trial_number', 'unknown')
                     
-                    # Also verify with trial data as secondary check
-                    data_is_practice = latest_result.get('is_practice', False)
-                    if is_practice_trial != data_is_practice:
-                        logger.warning(f"⚠️ Practice mode mismatch: session={is_practice_trial}, data={data_is_practice}")
-                    
-                    if is_practice_trial == False:  # Experiment trial
-                        # Storage enabled - save data immediately and verify success
-                        logger.info(f"🖾 Attempting to save EXPERIMENT trial {trial_number}")
+                    if not is_practice_trial:
                         save_success = experiment_controller.save_trial_data(latest_result)
                         if save_success:
                             logger.info(f"✅ EXPERIMENT trial {trial_number} data saved successfully")
                         else:
                             logger.error(f"❌ Failed to save EXPERIMENT trial {trial_number} data")
                             st.error("⚠️ 資料儲存失敗，請記下此試驗結果")
-                    
-                    elif is_practice_trial == True:  # Practice trial
-                        # Storage disabled - only log the event
+                    else:
                         logger.info(f"🏃 PRACTICE trial {trial_number} - storage disabled")
                 
-                # Show feedback if enabled
                 if session_manager.get_show_trial_feedback():
                     st.session_state.trial_phase = 'feedback'
                     st.session_state.feedback_response = response
                     st.session_state.feedback_time = response_time
                 else:
-                    # Go directly to next trial
                     _prepare_next_trial(session_manager)
                 
                 st.rerun()

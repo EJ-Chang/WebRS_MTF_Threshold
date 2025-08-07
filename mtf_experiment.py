@@ -261,7 +261,7 @@ class StimulusCache:
         
     def get_cache_key(self, mtf_value: float, image_hash: str = None) -> str:
         """生成緩存鍵值"""
-        rounded_mtf = round(mtf_value, 1)  # 四捨五入到0.1精度
+        rounded_mtf = round(mtf_value)
         return f"mtf_{rounded_mtf}_{image_hash or 'default'}"
     
     def put(self, mtf_value: float, image_data, image_hash: str = None):

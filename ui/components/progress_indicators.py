@@ -51,41 +51,28 @@ def show_animated_fixation(elapsed: float) -> None:
         # Fallback to simple display
         st.markdown("### <center>+</center>", unsafe_allow_html=True)
 
-def show_css_fixation_with_timer(duration: float, show_progress: bool = True) -> None:
+def show_resumable_css_fixation(duration: float, elapsed_time: float) -> None:
     """
-    Display CSS-animated fixation cross with automatic timing - NO st.rerun() needed!
-    
-    This function uses pure CSS animations and JavaScript timing to eliminate 
-    the need for repeated st.rerun() calls during fixation period.
+    Display a CSS-animated fixation cross that can be resumed.
+    This version uses animation-delay to sync with Python's rerun loop.
     
     Args:
-        duration: Fixation duration in seconds
-        show_progress: Whether to show progress indicator
+        duration: Total duration of the fixation in seconds.
+        elapsed_time: The time that has already passed in seconds.
     """
     try:
-        # Generate unique ID for this fixation instance
+        # Unique ID for this instance to avoid CSS conflicts
         fixation_id = f"fixation_{int(time.time() * 1000)}"
-        progress_id = f"progress_{int(time.time() * 1000)}"
         
-        # CSS animations and JavaScript timer
+        # Negative animation-delay starts the animation partway through
+        animation_delay = -elapsed_time
+        
         fixation_html = f"""
         <style>
-        #{fixation_id} {{
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 300px;
-            font-size: 48px;
-            color: #333;
-            background: #f0f0f0;
-            border-radius: 10px;
-            margin: 20px 0;
-            position: relative;
-        }}
-        
         #{fixation_id} .fixation-cross {{
             font-weight: bold;
-            animation: rotate-pulse {duration}s linear;
+            animation: rotate-pulse {duration}s linear {animation_delay}s;
+            animation-play-state: running;
         }}
         
         #{fixation_id} .progress-ring {{
@@ -98,10 +85,11 @@ def show_css_fixation_with_timer(duration: float, show_progress: bool = True) ->
             border: 3px solid #ddd;
             border-top: 3px solid #007bff;
             border-radius: 50%;
-            animation: progress-fill {duration}s linear;
+            animation: progress-fill {duration}s linear {animation_delay}s;
+            animation-play-state: running;
             opacity: 0.7;
         }}
-        
+
         @keyframes rotate-pulse {{
             0% {{ transform: rotate(0deg) scale(1); }}
             25% {{ transform: rotate(90deg) scale(1.1); }}
@@ -114,79 +102,29 @@ def show_css_fixation_with_timer(duration: float, show_progress: bool = True) ->
             0% {{ transform: translate(-50%, -50%) rotate(0deg); }}
             100% {{ transform: translate(-50%, -50%) rotate(360deg); }}
         }}
-        
-        #{progress_id} {{
-            text-align: center;
-            margin: 10px 0;
-            font-size: 16px;
-            color: #666;
-        }}
         </style>
         
-        <div id="{fixation_id}">
+        <div id="{fixation_id}" style="
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 300px;
+            font-size: 48px;
+            color: #333;
+            background: #f0f0f0;
+            border-radius: 10px;
+            margin: 20px 0;
+            position: relative;
+        ">
             <div class="fixation-cross">+</div>
-            {f'<div class="progress-ring"></div>' if show_progress else ''}
+            <div class="progress-ring"></div>
         </div>
-        
-        {f'<div id="{progress_id}">⏱️ 固視點：<span id="countdown-{progress_id}">0.0</span> 秒</div>' if show_progress else ''}
-        
-        <script>
-        // Dynamic countdown timer with 0.1s precision
-        (function() {{
-            var startTime = Date.now();
-            var duration = {duration * 1000}; // Convert to milliseconds
-            var countdownElement = document.getElementById('countdown-{progress_id}');
-            
-            function updateCountdown() {{
-                var elapsed = Date.now() - startTime;
-                var remaining = Math.max(0, duration - elapsed);
-                var remainingSeconds = remaining / 1000;
-                
-                if (countdownElement) {{
-                    countdownElement.textContent = remainingSeconds.toFixed(1);
-                    
-                    // Color change as time runs out
-                    if (remainingSeconds <= 1.0) {{
-                        countdownElement.style.color = '#dc3545'; // Red for final second
-                        countdownElement.style.fontWeight = 'bold';
-                    }} else if (remainingSeconds <= 2.0) {{
-                        countdownElement.style.color = '#fd7e14'; // Orange for warning
-                    }} else {{
-                        countdownElement.style.color = '#28a745'; // Green for normal
-                    }}
-                }}
-                
-                // Continue updating until complete
-                if (remaining > 0) {{
-                    setTimeout(updateCountdown, 100); // Update every 100ms
-                }}
-            }}
-            
-            // Start countdown immediately
-            updateCountdown();
-            
-            // Mark fixation as completed when done
-            setTimeout(function() {{
-                sessionStorage.setItem('fixation_completed', 'true');
-                sessionStorage.setItem('fixation_completion_time', Date.now());
-                
-                // Visual indication that fixation is complete
-                var fixationElement = document.getElementById('{fixation_id}');
-                if (fixationElement) {{
-                    fixationElement.style.background = '#e8f5e8';
-                    fixationElement.style.borderColor = '#28a745';
-                }}
-                
-                // Final countdown display
-                if (countdownElement) {{
-                    countdownElement.textContent = '0.0';
-                    countdownElement.style.color = '#28a745';
-                    countdownElement.style.fontWeight = 'bold';
-                }}
-            }}, {duration * 1000});
-        }})();
-        </script>
         """
+        st.markdown(fixation_html, unsafe_allow_html=True)
+
+    except Exception as e:
+        logger.error(f"Error showing resumable CSS fixation: {e}")
+        st.markdown("### <center>+</center>", unsafe_allow_html=True)
         
         st.markdown(fixation_html, unsafe_allow_html=True)
         
