@@ -386,4 +386,10 @@ print(f'Table info: {info}')
 - **[[image_test/README.md]]** - Image display testing tools
 
 ## TODOs
-1. 檢查實際在網站上的運作，什麼時候查表什麼時候做ADO，什麼時候畫圖
+1. 檢查是什麼地方卡我時間
+	1. 檢查繪圖時間
+	2. MTF計算時間
+	3. ADO計算時間
+2. 預先製圖成本多高？
+	1. 佔用記憶體？佔用多少？
+	2. 可以需要的時候再讀？
