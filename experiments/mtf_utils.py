@@ -341,7 +341,7 @@ def normalize_for_psychopy(image):
 def load_and_prepare_image(image_path, use_right_half=True):
     """載入圖片並準備用於 MTF 處理
     
-    載入圖片檔案，轉換為 RGB 格式，統一裁切為中心1600x1600正方形。
+    載入圖片檔案，轉換為 RGB 格式，統一裁切為中心1200x1200正方形。
     這個修改解決了UI布局問題，確保所有圖片具有一致的顯示尺寸。
     
     Args:
@@ -349,16 +349,16 @@ def load_and_prepare_image(image_path, use_right_half=True):
         use_right_half (bool, optional): 保留以兼容性，但現在統一使用中心裁切
         
     Returns:
-        numpy.ndarray: 準備好的 RGB 圖片陣列 (1600x1600)
+        numpy.ndarray: 準備好的 RGB 圖片陣列 (1200x1200)
         
     Raises:
         FileNotFoundError: 當圖片檔案不存在時
         ValueError: 當圖片無法正確載入時
         
     Example:
-        >>> # 統一1600x1600中心裁切
+        >>> # 統一1200x1200中心裁切
         >>> base_img = load_and_prepare_image('stimuli_img.png')
-        >>> print(base_img.shape)  # (1600, 1600, 3)
+        >>> print(base_img.shape)  # (1200, 1200, 3)
         >>> img_mtf = apply_mtf_to_image(base_img, 45.0)
     """
     
@@ -376,12 +376,12 @@ def load_and_prepare_image(image_path, use_right_half=True):
     else:
         raise ValueError("不支援的圖片格式")
     
-    # 統一裁切為1600x1600中心正方形
+    # 統一裁切為1200x1200中心正方形
     height, width = img_rgb.shape[:2]
     image_name = os.path.basename(image_path).lower()
     
     # 目標尺寸
-    target_size = 1600
+    target_size = 1200
     
     # 計算中心裁切區域
     center_y = height // 2
@@ -438,7 +438,7 @@ def load_and_prepare_image(image_path, use_right_half=True):
             img_cropped = cv2.resize(img_cropped, (target_size, target_size), interpolation=cv2.INTER_LANCZOS4)
     
     final_height, final_width = img_cropped.shape[:2]
-    print(f"{image_name}統一裁切：從 {width}x{height} → {final_width}x{final_height} (中心1600x1600)")
+    print(f"{image_name}統一裁切：從 {width}x{height} → {final_width}x{final_height} (中心1200x1200)")
     
     return img_cropped
 

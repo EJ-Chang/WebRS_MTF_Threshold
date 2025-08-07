@@ -349,23 +349,24 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
                         _prepare_next_trial(session_manager)
                     
                     st.rerun()
-    
-    elif st.session_state.trial_phase == 'feedback':
-        # Show neutral feedback without right/wrong judgment
-        response = st.session_state.get('feedback_response', 'unknown')
-        response_time = st.session_state.get('feedback_time', 0)
         
-        # Show response confirmation and timing
-        st.success(f"✅ 回應已記錄: {'清楚' if response == 'clear' else '不清楚'}")
-        st.info(f"⏱️ 反應時間: {response_time * 1000:.0f} ms")
-        
-        # Show ADO data if available and enabled
-        _display_ado_feedback(trial_data, session_manager)
-        
-        # Continue button
-        if st.button("繼續下一試驗", key="continue_trial"):
-            _prepare_next_trial(session_manager)
-            st.rerun()
+        # --- Feedback Phase --- #
+        elif st.session_state.trial_phase == 'feedback':
+            # Show neutral feedback without right/wrong judgment
+            response = st.session_state.get('feedback_response', 'unknown')
+            response_time = st.session_state.get('feedback_time', 0)
+            
+            # Show response confirmation and timing
+            st.success(f"✅ 回應已記錄: {'清楚' if response == 'clear' else '不清楚'}")
+            st.info(f"⏱️ 反應時間: {response_time * 1000:.0f} ms")
+            
+            # Show ADO data if available and enabled
+            _display_ado_feedback(trial_data, session_manager)
+            
+            # Continue button
+            if st.button("繼續下一試驗", key="continue_trial"):
+                _prepare_next_trial(session_manager)
+                st.rerun()
 
 def _prepare_next_trial(session_manager):
     """Prepare for next trial or complete experiment if done"""
