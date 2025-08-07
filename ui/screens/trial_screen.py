@@ -232,6 +232,10 @@ def display_trial_screen(session_manager, experiment_controller) -> None:
         session_manager: SessionStateManager instance
         experiment_controller: ExperimentController instance
     """
+    # Create a single, persistent placeholder for all trial content.
+    if 'trial_placeholder' not in st.session_state:
+        st.session_state.trial_placeholder = st.empty()
+
     try:
         # Ensure experiment_controller is available
         if experiment_controller is None:
@@ -272,79 +276,79 @@ def display_trial_screen(session_manager, experiment_controller) -> None:
         st.error(f"Error in trial screen: {e}")
 
 def _display_trial_content(trial_data, session_manager, experiment_controller):
-    """Display the actual trial content using a stable placeholder to prevent rendering issues."""
+    """Display the actual trial content using the original legacy rerun-based method."""
     
-    # Create a single, stable placeholder for all trial content.
-    placeholder = st.empty()
-
-    # Initialize trial phase and timer if they don't exist.
-    if 'trial_phase' not in st.session_state:
-        st.session_state.trial_phase = 'fixation'
-        st.session_state.phase_start_time = time.time()
-    
-    # Calculate elapsed time.
-    current_time = time.time()
-    phase_start_time = st.session_state.get('phase_start_time', current_time)
-    phase_elapsed = current_time - phase_start_time
-    
-    # --- Fixation Phase --- #
-    if st.session_state.trial_phase == 'fixation':
-        with placeholder.container():
+    with st.session_state.trial_placeholder.container():
+        # Initialize trial phase and timer
+        if 'trial_phase' not in st.session_state:
+            st.session_state.trial_phase = 'fixation'
+            st.session_state.phase_start_time = time.time()
+        
+        # Calculate elapsed time
+        current_time = time.time()
+        phase_start_time = st.session_state.get('phase_start_time', current_time)
+        phase_elapsed = current_time - phase_start_time
+        
+        # --- Fixation Phase (Legacy Implementation) --- #
+        if st.session_state.trial_phase == 'fixation':
             fixation_duration = session_manager.get_fixation_duration()
             
-            # Display the legacy fixation cross and its timer.
+            # Call the legacy animation function directly. It includes its own timer display.
             show_animated_fixation(phase_elapsed)
 
-            # Check if the fixation period is over.
+            # Check if fixation period is over
             if phase_elapsed >= fixation_duration:
-                # Transition to the stimulus phase.
+                # Transition to the stimulus phase
                 st.session_state.trial_phase = 'stimulus'
-                st.session_state.phase_start_time = time.time()
-                st.rerun() # Rerun to display the stimulus.
+                st.session_state.phase_start_time = time.time() # Reset timer for stimulus
+                
+                # Clear the screen completely before showing the stimulus
+                st.session_state.trial_placeholder.empty()
+                st.rerun()
             else:
-                # Continue the countdown.
+                # Refresh the screen at 10Hz for a smooth countdown
                 time.sleep(0.1)
                 st.rerun()
-        return
-
-    # --- Stimulus Phase --- #
-    elif st.session_state.trial_phase == 'stimulus':
-        with placeholder.container():
-            _display_stimulus_with_staged_loading(trial_data, session_manager, experiment_controller)
-        
-        response_data = st.session_state.get('trial_response_data', {'left_pressed': False, 'right_pressed': False})
-        left_pressed = response_data['left_pressed']
-        right_pressed = response_data['right_pressed']
-        
-        if left_pressed or right_pressed:
-            response = "not_clear" if left_pressed else "clear"
-            response_time = time.time() - st.session_state.get('phase_start_time', current_time)
             
-            if experiment_controller.process_response(response, response_time):
-                trial_results = session_manager.get_trial_results()
-                if trial_results:
-                    latest_result = trial_results[-1]
-                    is_practice_trial = session_manager.is_practice_mode()
-                    trial_number = latest_result.get('trial_number', 'unknown')
-                    
-                    if not is_practice_trial:
-                        save_success = experiment_controller.save_trial_data(latest_result)
-                        if save_success:
-                            logger.info(f"✅ EXPERIMENT trial {trial_number} data saved successfully")
+            return # Explicitly stop rendering anything else during fixation
+
+        # --- Stimulus Phase --- #
+        elif st.session_state.trial_phase == 'stimulus':
+            _display_stimulus_with_staged_loading(trial_data, session_manager, experiment_controller)
+            
+            response_data = st.session_state.get('trial_response_data', {'left_pressed': False, 'right_pressed': False})
+            left_pressed = response_data['left_pressed']
+            right_pressed = response_data['right_pressed']
+            
+            if left_pressed or right_pressed:
+                response = "not_clear" if left_pressed else "clear"
+                response_time = time.time() - st.session_state.get('phase_start_time', current_time)
+                
+                if experiment_controller.process_response(response, response_time):
+                    trial_results = session_manager.get_trial_results()
+                    if trial_results:
+                        latest_result = trial_results[-1]
+                        is_practice_trial = session_manager.is_practice_mode()
+                        trial_number = latest_result.get('trial_number', 'unknown')
+                        
+                        if not is_practice_trial:
+                            save_success = experiment_controller.save_trial_data(latest_result)
+                            if save_success:
+                                logger.info(f"✅ EXPERIMENT trial {trial_number} data saved successfully")
+                            else:
+                                logger.error(f"❌ Failed to save EXPERIMENT trial {trial_number} data")
+                                st.error("⚠️ 資料儲存失敗，請記下此試驗結果")
                         else:
-                            logger.error(f"❌ Failed to save EXPERIMENT trial {trial_number} data")
-                            st.error("⚠️ 資料儲存失敗，請記下此試驗結果")
+                            logger.info(f"🏃 PRACTICE trial {trial_number} - storage disabled")
+                    
+                    if session_manager.get_show_trial_feedback():
+                        st.session_state.trial_phase = 'feedback'
+                        st.session_state.feedback_response = response
+                        st.session_state.feedback_time = response_time
                     else:
-                        logger.info(f"🏃 PRACTICE trial {trial_number} - storage disabled")
-                
-                if session_manager.get_show_trial_feedback():
-                    st.session_state.trial_phase = 'feedback'
-                    st.session_state.feedback_response = response
-                    st.session_state.feedback_time = response_time
-                else:
-                    _prepare_next_trial(session_manager)
-                
-                st.rerun()
+                        _prepare_next_trial(session_manager)
+                    
+                    st.rerun()
     
     elif st.session_state.trial_phase == 'feedback':
         # Show neutral feedback without right/wrong judgment
@@ -380,6 +384,10 @@ def _prepare_next_trial(session_manager):
         session_manager.set_experiment_stage('results')
         return  # Don't clear trial data, let results screen handle it
     
+    # Clear the placeholder to ensure a clean slate for the next trial.
+    if 'trial_placeholder' in st.session_state:
+        st.session_state.trial_placeholder.empty()
+
     # Clear trial-specific session state for next trial
     keys_to_clear = [
         'trial_phase', 'phase_start_time', 'feedback_response', 'feedback_time',
