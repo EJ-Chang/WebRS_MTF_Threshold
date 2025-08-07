@@ -529,8 +529,8 @@ class MTFExperimentManager:
         """Initialize the ADO engine for MTF testing"""
         try:
             self.ado_engine = ADOEngine(
-                design_space=None,  # 使用ado_utils.py中的預設設計空間 (95個設計點: 5-99%, 每1%一步)
-                threshold_range=(5, 99),
+                design_space=None,  # 使用ado_utils.py中的預設設計空間 (99個設計點: 1-99%, 每1%一步)
+                threshold_range=(1, 99),
                 slope_range=(0.05, 5.0),
                 threshold_points=31,
                 slope_points=21
@@ -595,14 +595,19 @@ class MTFExperimentManager:
         This eliminates the need for repeated encoding in image_display.py
         """
         try:
-            # 先檢查是否已有 base64 緩存
-            cache_key = f"base64_{mtf_value}"
-            if hasattr(self, 'base64_cache'):
-                if cache_key in self.base64_cache:
-                    print(f"🚀 Base64 cache hit for MTF {mtf_value:.1f}%")
-                    return self.base64_cache[cache_key]
-            else:
+            # 初始化 base64 緩存系統 (包含LRU管理)
+            if not hasattr(self, 'base64_cache'):
                 self.base64_cache = {}
+                self.base64_cache_access = {}  # 記錄訪問次數，用於LRU
+                self.base64_max_size = 5  # 限制5張圖片避免記憶體積累
+            
+            # 檢查是否已有 base64 緩存
+            cache_key = f"base64_{mtf_value}"
+            if cache_key in self.base64_cache:
+                # 更新訪問計數
+                self.base64_cache_access[cache_key] += 1
+                print(f"🚀 Base64 cache hit for MTF {mtf_value:.1f}% (access count: {self.base64_cache_access[cache_key]})")
+                return self.base64_cache[cache_key]
             
             # 生成 numpy 圖片
             img_mtf = self.generate_stimulus_image(mtf_value)
@@ -620,8 +625,8 @@ class MTFExperimentManager:
             # RGB → BGR 轉換
             image_bgr = cv2.cvtColor(img_mtf, cv2.COLOR_RGB2BGR)
             
-            # PNG 編碼 (無損)
-            encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 9]
+            # PNG 編碼 (無壓縮，最快速度)
+            encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 0]
             success, encoded_img = cv2.imencode('.png', image_bgr, encode_params)
             
             if not success:
@@ -635,14 +640,49 @@ class MTFExperimentManager:
             encoding_time = (end_time - start_time) * 1000
             print(f"✅ Base64 encoding completed in {encoding_time:.2f}ms ({len(img_base64)} chars)")
             
+            # 檢查緩存大小，必要時清理舊項目
+            if len(self.base64_cache) >= self.base64_max_size:
+                self._evict_base64_lru()
+            
             # 緩存編碼後的 base64 字串
             self.base64_cache[cache_key] = img_base64
+            self.base64_cache_access[cache_key] = 1  # 初始訪問計數
+            
+            print(f"💾 Base64 cached for MTF {mtf_value:.1f}% (cache size: {len(self.base64_cache)}/{self.base64_max_size})")
             
             return img_base64
             
         except Exception as e:
             print(f"❌ Error in base64 generation: {e}")
             return None
+    
+    def _evict_base64_lru(self):
+        """移除最少使用的base64緩存項目以防止記憶體積累"""
+        if not self.base64_cache:
+            return
+        
+        # 找到使用次數最少的項目
+        lru_key = min(self.base64_cache_access.keys(), 
+                     key=lambda k: self.base64_cache_access[k])
+        
+        # 計算被清理的項目大小（估算）
+        evicted_size = len(self.base64_cache[lru_key]) if lru_key in self.base64_cache else 0
+        mtf_value = lru_key.replace('base64_', '') if 'base64_' in lru_key else 'unknown'
+        
+        # 清理緩存
+        del self.base64_cache[lru_key]
+        del self.base64_cache_access[lru_key]
+        
+        print(f"🗑️ Evicted base64 cache for MTF {mtf_value}% ({evicted_size//1024}KB freed)")
+    
+    def clear_base64_cache(self):
+        """清空所有base64緩存，通常在實驗結束後調用"""
+        if hasattr(self, 'base64_cache'):
+            cache_count = len(self.base64_cache)
+            total_size = sum(len(v) for v in self.base64_cache.values())
+            self.base64_cache.clear()
+            self.base64_cache_access.clear()
+            print(f"🧹 Cleared all base64 cache: {cache_count} items, {total_size//1024//1024}MB freed")
     
     def get_next_trial(self) -> Optional[Dict]:
         """Get the next trial parameters using ADO"""

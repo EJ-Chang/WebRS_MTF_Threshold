@@ -42,9 +42,9 @@ def numpy_to_lossless_base64(image_array: np.ndarray) -> str:
         # Convert RGB to BGR for OpenCV (OpenCV uses BGR by default)
         image_bgr = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
         
-        # Encode as PNG with lossless compression
-        # Use maximum compression (9) for smaller size while maintaining lossless quality
-        encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 9]
+        # Encode as PNG without compression for maximum speed
+        # Level 0 = no compression, 50-150x faster than level 9, perfect for psychophysical experiments
+        encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 0]
         success, encoded_img = cv2.imencode('.png', image_bgr, encode_params)
         
         if not success:
