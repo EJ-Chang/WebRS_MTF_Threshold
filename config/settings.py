@@ -46,4 +46,14 @@ PRACTICE_TRIAL_LIMIT = 3  # Number of practice trials before main experiment
 MAX_TRIALS = 45  # Maximum number of trials in the main experiment
 MIN_TRIALS = 15  # Minimum number of trials before convergence check
 CONVERGENCE_THRESHOLD = 0.15  # Convergence criterion for threshold SD
-STIMULUS_DURATION = 1.0  # Stimulus display duration in seconds
+STIMULUS_DURATION = 3.0  # Stimulus display duration in seconds
+
+# Experiment flow settings
+DEFAULT_FIXATION_DURATION = 3.0  # seconds
+DEFAULT_SHOW_TRIAL_FEEDBACK = False
+
+# Animation settings
+FIXATION_ANIMATION_TYPE = "css"  # Options: "css", "gif", "legacy"
+# css: Pure CSS animations (recommended - smooth, no CPU impact)
+# gif: Pre-rendered GIF animations (ultimate smoothness, zero CPU)  
+# legacy: st.rerun() based animations (not recommended)

@@ -78,18 +78,20 @@ def crop_image_center(image_array: np.ndarray) -> Optional[np.ndarray]:
     # Cropping logic is handled in mtf_experiment.py load_and_prepare_image function
     return image_array
 
-def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[Dict[str, Any]]:
+def display_mtf_stimulus_image(image_data: Any, caption: str = "", staged_loading: bool = True) -> Optional[Dict[str, Any]]:
     """
-    Display MTF stimulus image with lossless pixel-perfect rendering.
+    Display MTF stimulus image with lossless pixel-perfect rendering and optional staged loading.
     
     Features:
     - Direct numpy → base64 conversion without PIL recompression
     - Pixel-perfect CSS rendering with crisp edges
     - Absolute pixel dimensions for precise display
+    - Optional staged loading: placeholder → loading → final image
     
     Args:
         image_data: Image data (various formats supported)
         caption: Optional caption for the image
+        staged_loading: Whether to use staged loading (default True)
         
     Returns:
         Dict with container dimensions for button positioning
@@ -97,6 +99,48 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
     if image_data is None:
         st.error("❌ Stimulus image not available")
         return None
+
+    # Staged loading: show placeholder first if enabled
+    if staged_loading:
+        # Create placeholder containers
+        if 'image_container' not in st.session_state:
+            st.session_state.image_container = st.empty()
+        
+        # Show placeholder initially
+        placeholder_html = """
+        <div style="
+            text-align: center; 
+            margin: 20px auto; 
+            width: 400px; 
+            height: 400px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            border: 2px dashed #ddd; 
+            border-radius: 10px;
+            background: #f8f9fa;
+            color: #6c757d;
+        ">
+            <div style="font-size: 48px; margin-bottom: 15px;">🖼️</div>
+            <div style="font-size: 16px;">載入刺激圖片中...</div>
+            <div style="margin-top: 10px;">
+                <div style="width: 200px; height: 4px; background: #e9ecef; border-radius: 2px;">
+                    <div style="width: 0%; height: 100%; background: #007bff; border-radius: 2px; animation: loading-bar 2s ease-in-out;"></div>
+                </div>
+            </div>
+        </div>
+        <style>
+        @keyframes loading-bar {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+        </style>
+        """
+        
+        st.session_state.image_container.markdown(placeholder_html, unsafe_allow_html=True)
+        time.sleep(0.2)  # Brief pause to show placeholder
 
     try:
         # Process image data format
@@ -143,7 +187,12 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
                     pre_encoded = exp_manager.generate_and_cache_base64_image(mtf_value)
                     if pre_encoded:
                         img_str = pre_encoded
-                        logger.debug("🚀 Using pre-encoded base64 from experiment manager (performance optimized)")
+                        # Check if this was pregenerated during fixation
+                        if hasattr(st.session_state, 'pregeneration_mtf') and st.session_state.pregeneration_mtf == mtf_value:
+                            pregeneration_time = st.session_state.get('pregeneration_time', 0)
+                            logger.info(f"🎯 Using pregenerated image from fixation: MTF {mtf_value:.1f}% (generated in {pregeneration_time:.2f}ms)")
+                        else:
+                            logger.debug("🚀 Using cached base64 from experiment manager (performance optimized)")
                     else:
                         raise Exception("Pre-encoding failed")
                 except Exception as e:
@@ -260,7 +309,15 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
             <p style="margin: 10px 0; color: #666; font-size: 14px; text-align: center; position: absolute; bottom: 5px; width: 100%;">{caption}</p>
         </div>
         """
-        st.markdown(html_content, unsafe_allow_html=True)
+        
+        # Display image with staged loading support
+        if staged_loading and 'image_container' in st.session_state:
+            # Replace placeholder with actual image
+            st.session_state.image_container.markdown(html_content, unsafe_allow_html=True)
+            logger.debug("🎬 Staged loading: Replaced placeholder with actual image")
+        else:
+            # Direct display without staging
+            st.markdown(html_content, unsafe_allow_html=True)
 
         # Enhanced logging for pixel-perfect display
         logger.debug(f"🖼️ Pixel-perfect display: {original_w}x{original_h} (1:1 ratio) | Container: {container_width}x{container_height}")

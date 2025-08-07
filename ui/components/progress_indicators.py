@@ -128,22 +128,63 @@ def show_css_fixation_with_timer(duration: float, show_progress: bool = True) ->
             {f'<div class="progress-ring"></div>' if show_progress else ''}
         </div>
         
-        {f'<div id="{progress_id}">⏱️ 固視點：{duration:.1f} 秒</div>' if show_progress else ''}
+        {f'<div id="{progress_id}">⏱️ 固視點：<span id="countdown-{progress_id}">0.0</span> 秒</div>' if show_progress else ''}
         
         <script>
-        // JavaScript timer to track fixation completion (no st.rerun needed!)
-        setTimeout(function() {{
-            // Mark fixation as completed in session storage for trial_screen.py to detect
-            sessionStorage.setItem('fixation_completed', 'true');
-            sessionStorage.setItem('fixation_completion_time', Date.now());
+        // Dynamic countdown timer with 0.1s precision
+        (function() {{
+            var startTime = Date.now();
+            var duration = {duration * 1000}; // Convert to milliseconds
+            var countdownElement = document.getElementById('countdown-{progress_id}');
             
-            // Optional: Add visual indication that fixation is complete
-            var fixationElement = document.getElementById('{fixation_id}');
-            if (fixationElement) {{
-                fixationElement.style.background = '#e8f5e8';
-                fixationElement.style.borderColor = '#28a745';
+            function updateCountdown() {{
+                var elapsed = Date.now() - startTime;
+                var remaining = Math.max(0, duration - elapsed);
+                var remainingSeconds = remaining / 1000;
+                
+                if (countdownElement) {{
+                    countdownElement.textContent = remainingSeconds.toFixed(1);
+                    
+                    // Color change as time runs out
+                    if (remainingSeconds <= 1.0) {{
+                        countdownElement.style.color = '#dc3545'; // Red for final second
+                        countdownElement.style.fontWeight = 'bold';
+                    }} else if (remainingSeconds <= 2.0) {{
+                        countdownElement.style.color = '#fd7e14'; // Orange for warning
+                    }} else {{
+                        countdownElement.style.color = '#28a745'; // Green for normal
+                    }}
+                }}
+                
+                // Continue updating until complete
+                if (remaining > 0) {{
+                    setTimeout(updateCountdown, 100); // Update every 100ms
+                }}
             }}
-        }}, {duration * 1000});
+            
+            // Start countdown immediately
+            updateCountdown();
+            
+            // Mark fixation as completed when done
+            setTimeout(function() {{
+                sessionStorage.setItem('fixation_completed', 'true');
+                sessionStorage.setItem('fixation_completion_time', Date.now());
+                
+                // Visual indication that fixation is complete
+                var fixationElement = document.getElementById('{fixation_id}');
+                if (fixationElement) {{
+                    fixationElement.style.background = '#e8f5e8';
+                    fixationElement.style.borderColor = '#28a745';
+                }}
+                
+                // Final countdown display
+                if (countdownElement) {{
+                    countdownElement.textContent = '0.0';
+                    countdownElement.style.color = '#28a745';
+                    countdownElement.style.fontWeight = 'bold';
+                }}
+            }}, {duration * 1000});
+        }})();
         </script>
         """
         
