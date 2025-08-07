@@ -128,17 +128,58 @@ def display_mtf_stimulus_image(image_data: Any, caption: str = "") -> Optional[D
         if processed_img is None:
             processed_img = image_array
 
-        # Use lossless encoding instead of PIL recompression
-        try:
-            img_str = numpy_to_lossless_base64(processed_img)
-            logger.debug("✅ Using lossless base64 encoding (no PIL recompression)")
-        except Exception as e:
-            logger.warning(f"⚠️ Lossless encoding failed, falling back to PIL: {e}")
-            # Fallback to original PIL method if lossless encoding fails
-            img_pil = Image.fromarray(processed_img)
-            buffer = BytesIO()
-            img_pil.save(buffer, format='PNG')
-            img_str = base64.b64encode(buffer.getvalue()).decode()
+        # Check if we have a pre-encoded base64 string to avoid repeated encoding
+        if isinstance(image_data, str) and image_data.startswith('data:image'):
+            # Already has base64 data, extract it
+            img_str = image_data.split(',')[1]
+            logger.debug("✅ Using pre-encoded base64 data (no encoding needed)")
+        elif hasattr(st.session_state, 'mtf_experiment_manager'):
+            # Try to get pre-encoded base64 from experiment manager
+            exp_manager = st.session_state.mtf_experiment_manager
+            trial_data = st.session_state.get('mtf_trial_data')
+            if trial_data and 'mtf_value' in trial_data:
+                mtf_value = trial_data['mtf_value']
+                try:
+                    pre_encoded = exp_manager.generate_and_cache_base64_image(mtf_value)
+                    if pre_encoded:
+                        img_str = pre_encoded
+                        logger.debug("🚀 Using pre-encoded base64 from experiment manager (performance optimized)")
+                    else:
+                        raise Exception("Pre-encoding failed")
+                except Exception as e:
+                    logger.warning(f"Pre-encoding failed, using real-time encoding: {e}")
+                    # Fallback to real-time encoding
+                    try:
+                        img_str = numpy_to_lossless_base64(processed_img)
+                        logger.debug("⚠️ Using real-time lossless base64 encoding")
+                    except Exception as e2:
+                        logger.warning(f"⚠️ Lossless encoding failed, falling back to PIL: {e2}")
+                        img_pil = Image.fromarray(processed_img)
+                        buffer = BytesIO()
+                        img_pil.save(buffer, format='PNG')
+                        img_str = base64.b64encode(buffer.getvalue()).decode()
+            else:
+                # No trial data, use real-time encoding
+                try:
+                    img_str = numpy_to_lossless_base64(processed_img)
+                    logger.debug("✅ Using real-time lossless base64 encoding")
+                except Exception as e:
+                    logger.warning(f"⚠️ Lossless encoding failed, falling back to PIL: {e}")
+                    img_pil = Image.fromarray(processed_img)
+                    buffer = BytesIO()
+                    img_pil.save(buffer, format='PNG')
+                    img_str = base64.b64encode(buffer.getvalue()).decode()
+        else:
+            # No experiment manager, use real-time encoding
+            try:
+                img_str = numpy_to_lossless_base64(processed_img)
+                logger.debug("✅ Using real-time lossless base64 encoding")
+            except Exception as e:
+                logger.warning(f"⚠️ Lossless encoding failed, falling back to PIL: {e}")
+                img_pil = Image.fromarray(processed_img)
+                buffer = BytesIO()
+                img_pil.save(buffer, format='PNG')
+                img_str = base64.b64encode(buffer.getvalue()).decode()
 
         # Add unique ID for CSS targeting
         img_id = f"mtf_img_{int(time.time() * 1000)}"

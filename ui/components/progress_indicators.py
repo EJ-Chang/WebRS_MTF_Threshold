@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 def show_animated_fixation(elapsed: float) -> None:
     """
-    Display animated fixation cross with progress indication
+    Display animated fixation cross with progress indication (Legacy - use show_css_fixation_with_timer for better performance)
     
     Args:
         elapsed: Elapsed time in seconds
@@ -48,6 +48,109 @@ def show_animated_fixation(elapsed: float) -> None:
         
     except Exception as e:
         logger.error(f"Error showing animated fixation: {e}")
+        # Fallback to simple display
+        st.markdown("### <center>+</center>", unsafe_allow_html=True)
+
+def show_css_fixation_with_timer(duration: float, show_progress: bool = True) -> None:
+    """
+    Display CSS-animated fixation cross with automatic timing - NO st.rerun() needed!
+    
+    This function uses pure CSS animations and JavaScript timing to eliminate 
+    the need for repeated st.rerun() calls during fixation period.
+    
+    Args:
+        duration: Fixation duration in seconds
+        show_progress: Whether to show progress indicator
+    """
+    try:
+        # Generate unique ID for this fixation instance
+        fixation_id = f"fixation_{int(time.time() * 1000)}"
+        progress_id = f"progress_{int(time.time() * 1000)}"
+        
+        # CSS animations and JavaScript timer
+        fixation_html = f"""
+        <style>
+        #{fixation_id} {{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 300px;
+            font-size: 48px;
+            color: #333;
+            background: #f0f0f0;
+            border-radius: 10px;
+            margin: 20px 0;
+            position: relative;
+        }}
+        
+        #{fixation_id} .fixation-cross {{
+            font-weight: bold;
+            animation: rotate-pulse {duration}s linear;
+        }}
+        
+        #{fixation_id} .progress-ring {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            border: 3px solid #ddd;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: progress-fill {duration}s linear;
+            opacity: 0.7;
+        }}
+        
+        @keyframes rotate-pulse {{
+            0% {{ transform: rotate(0deg) scale(1); }}
+            25% {{ transform: rotate(90deg) scale(1.1); }}
+            50% {{ transform: rotate(180deg) scale(1); }}
+            75% {{ transform: rotate(270deg) scale(1.1); }}
+            100% {{ transform: rotate(360deg) scale(1); }}
+        }}
+        
+        @keyframes progress-fill {{
+            0% {{ transform: translate(-50%, -50%) rotate(0deg); }}
+            100% {{ transform: translate(-50%, -50%) rotate(360deg); }}
+        }}
+        
+        #{progress_id} {{
+            text-align: center;
+            margin: 10px 0;
+            font-size: 16px;
+            color: #666;
+        }}
+        </style>
+        
+        <div id="{fixation_id}">
+            <div class="fixation-cross">+</div>
+            {f'<div class="progress-ring"></div>' if show_progress else ''}
+        </div>
+        
+        {f'<div id="{progress_id}">⏱️ 固視點：{duration:.1f} 秒</div>' if show_progress else ''}
+        
+        <script>
+        // JavaScript timer to track fixation completion (no st.rerun needed!)
+        setTimeout(function() {{
+            // Mark fixation as completed in session storage for trial_screen.py to detect
+            sessionStorage.setItem('fixation_completed', 'true');
+            sessionStorage.setItem('fixation_completion_time', Date.now());
+            
+            // Optional: Add visual indication that fixation is complete
+            var fixationElement = document.getElementById('{fixation_id}');
+            if (fixationElement) {{
+                fixationElement.style.background = '#e8f5e8';
+                fixationElement.style.borderColor = '#28a745';
+            }}
+        }}, {duration * 1000});
+        </script>
+        """
+        
+        st.markdown(fixation_html, unsafe_allow_html=True)
+        
+    except Exception as e:
+        logger.error(f"Error showing CSS fixation: {e}")
         # Fallback to simple display
         st.markdown("### <center>+</center>", unsafe_allow_html=True)
 

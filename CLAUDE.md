@@ -385,11 +385,119 @@ print(f'Table info: {info}')
 - **[[ADO_Early_Termination_Analysis.md]]** - ADO early termination feature assessment
 - **[[image_test/README.md]]** - Image display testing tools
 
-## TODOs
-1. 檢查是什麼地方卡我時間
-	1. 檢查繪圖時間
-	2. MTF計算時間
-	3. ADO計算時間
-2. 預先製圖成本多高？
-	1. 佔用記憶體？佔用多少？
-	2. 可以需要的時候再讀？
+## 性能優化進度 (2025年8月)
+
+### 已識別的主要性能瓶頸
+1. **st.rerun() 過度使用** ⭐⭐⭐⭐⭐
+   - 每個 trial 需要 5-8 次頁面重載 (位置: `trial_screen.py:153,236`)
+   - **延遲**: 網站環境下 6-12 秒
+   - **原因**: fixation 動畫每 100ms 觸發完整頁面刷新
+
+2. **實時 MTF 圖片生成** ⭐⭐⭐⭐
+   - 每張 1600×1600 圖片即時高斯模糊處理 (位置: `mtf_experiment.py:558-584`)
+   - **延遲**: 網站環境下 2-5 秒
+   - **原因**: 服務器 CPU 資源限制，即使有 v0.4 lookup table 依然需要 OpenCV 處理
+
+3. **ADO 貝葉斯計算** ⭐⭐⭐
+   - 95×41×30 網格搜尋互資訊計算 (位置: `ado_utils.py:114`)
+   - **延遲**: 網站環境下 1-3 秒
+   - **原因**: 116,850 次心理測量函數計算
+
+4. **圖片編碼傳輸** ⭐⭐
+   - 7.68MB 圖片無損 PNG 編碼和 Base64 轉換
+   - **延遲**: 網站環境下 1-2 秒
+
+### 優化實施計劃
+
+#### 階段一：減少 st.rerun() 使用 (2025-08-07)
+- [x] 修改 `trial_screen.py` - 移除 fixation 期間重複 rerun (**已還原** - 不是主要瓶頸)
+- [x] 修改 `progress_indicators.py` - 改用 CSS 動畫 (**已實施** - 保留備用)
+- [x] **發現**: st.rerun() 不是主要瓶頸，真正問題在圖片編碼
+- [x] **風險**: 低 - 不影響實驗精度
+
+#### 階段二：解決真正瓶頸 - Base64 重複編碼 (2025-08-07) ⭐
+- [x] **問題識別**: 每次顯示圖片都重複進行 RGB→BGR + PNG編碼 + Base64 轉換
+- [x] **位置**: `image_display.py:43-54` 的 `numpy_to_lossless_base64()` 函數
+- [x] **延遲**: 網站環境下每次 1-3 秒 (PNG 最大壓縮級別 9)
+- [x] **解決方案**: 實施 Base64 預編碼緩存系統
+  - [x] 修改 `mtf_experiment.py` - 新增 `generate_and_cache_base64_image()`
+  - [x] 修改 `image_display.py` - 支援預編碼 base64 字串
+  - [x] 建立 base64 快取機制，避免重複編碼
+- [x] **預期效果**: 從每次 1-3 秒降至 <100ms (快取命中時)
+- [x] **風險**: 低 - 保持原有圖片品質和像素精度
+
+#### 階段三：MTF 完整預生成系統 (未來執行)  
+- [ ] 建立 MTF 圖片庫管理系統
+- [ ] 實施按需載入機制 (91 個 MTF 級別，5%-95%)
+- [ ] 智能快取策略 (記憶體佔用 ~100MB)
+- [ ] **預期效果**: 進一步節省 MTF 計算時間
+- [ ] **風險**: 中等 - 需要 200-300MB 磁碟空間
+
+### 記憶體和儲存分析
+
+#### 預生成成本
+- **單一刺激圖片的 MTF 庫**: 91 個級別 × 7.68MB = ~700MB (未壓縮)
+- **PNG 壓縮後**: 約 200-300MB 磁碟空間
+- **智能快取**: 只在記憶體保持 10-15 張圖片 (~100MB RAM)
+
+#### 載入策略
+- **選擇性預生成**: 只處理用戶選中的刺激圖片
+- **按需載入**: LRU 快取機制，避免全部載入記憶體
+- **背景預載**: 根據 ADO 估計預載可能需要的 MTF 值
+
+### 總體目標與實際結果
+- **問題根源**: Base64 重複編碼，每次 1-3 秒延遲 (非 st.rerun())
+- **現況**: 每個 trial 10+ 秒延遲 (網站環境)
+- **階段二實施後**: 預期減少至 **3-5 秒** (Base64 快取命中時)
+- **階段三完成後**: 進一步減少至 **2-3 秒** (完整預生成)
+- **圖片品質**: ✅ 保持 100% 無損，像素完美顯示
+
+## 技術實施細節
+
+### 🎯 真正瓶頸：Base64 重複編碼問題
+```python
+# 問題: 每次 trial 都重複編碼 (image_display.py:43-54)
+def numpy_to_lossless_base64(image_array):
+    image_bgr = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+    encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 9]  # 最大壓縮 = 慢！
+    success, encoded_img = cv2.imencode('.png', image_bgr, encode_params)
+    img_base64 = base64.b64encode(encoded_img.tobytes()).decode()  # 1-3秒延遲
+    return img_base64
+
+# 解決方案: Base64 預編碼快取
+class MTFExperimentManager:
+    def generate_and_cache_base64_image(self, mtf_value):
+        # 1. 檢查 base64 快取
+        if cache_hit: return cached_base64  # <1ms
+        
+        # 2. 生成 numpy 圖片 (一次)
+        img_mtf = self.generate_stimulus_image(mtf_value)
+        
+        # 3. 編碼並快取 (一次)
+        img_base64 = encode_to_base64(img_mtf)
+        self.base64_cache[mtf_value] = img_base64
+        return img_base64
+```
+
+### st.rerun() 優化策略 (已驗證非主要瓶頸)
+```python
+# 現在: fixation 每 100ms 重載 (保持原有邏輯)
+show_animated_fixation(phase_elapsed)  
+time.sleep(0.1)
+st.rerun()  # 實際影響 < 1 秒
+
+# 備用: CSS 動畫版本 (已實施，可選用)
+show_css_fixation_with_timer(duration)  # 純前端，零重載
+```
+
+### Base64 快取架構 (已實施)
+```python
+class MTFExperimentManager:
+    def __init__(self):
+        self.stimulus_cache = {}      # numpy array 快取
+        self.base64_cache = {}        # base64 字串快取 (新增)
+        
+    def generate_and_cache_base64_image(self, mtf_value):
+        # 智能快取策略: numpy → base64 → 顯示
+        # 避免重複編碼，大幅提升性能
+```

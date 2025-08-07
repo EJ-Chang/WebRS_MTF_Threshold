@@ -264,8 +264,8 @@ class StimulusCache:
         rounded_mtf = round(mtf_value, 1)  # 四捨五入到0.1精度
         return f"mtf_{rounded_mtf}_{image_hash or 'default'}"
     
-    def put(self, mtf_value: float, image_data: str, image_hash: str = None):
-        """將圖片存入緩存"""
+    def put(self, mtf_value: float, image_data, image_hash: str = None):
+        """將圖片存入緩存 - 支援 numpy array 和 base64 字串"""
         cache_key = self.get_cache_key(mtf_value, image_hash)
         
         # 如果緩存已滿，移除最少使用的項目
@@ -275,7 +275,8 @@ class StimulusCache:
         self.cache[cache_key] = {
             'data': image_data,
             'timestamp': time.time(),
-            'mtf_value': mtf_value
+            'mtf_value': mtf_value,
+            'data_type': 'base64' if isinstance(image_data, str) else 'numpy'
         }
         self.access_count[cache_key] = 0
     
@@ -543,7 +544,7 @@ class MTFExperimentManager:
         """
         Generate stimulus image with specified MTF value
         Returns numpy array for lossless display
-        Uses caching for performance improvement
+        Uses caching with BASE64 pre-encoding for performance improvement
         """
         try:
             if self.base_image is None:
@@ -553,6 +554,7 @@ class MTFExperimentManager:
             # 首先檢查緩存
             cached_image = self.stimulus_cache.get(mtf_value)
             if cached_image is not None:
+                # Cache 中存的是 numpy array，直接返回
                 return cached_image
                 
             # 如果沒有緩存，即時生成 (使用 v0.4 新算法)
@@ -578,13 +580,68 @@ class MTFExperimentManager:
             print(f"   原圖範圍: {self.base_image.min()}-{self.base_image.max()}")
             print(f"   處理後範圍: {img_mtf.min()}-{img_mtf.max()}")
             
-            # 直接存入緩存供未來使用 (儲存 numpy array)
+            # 存入緩存 (儲存 numpy array，讓 image_display.py 處理編碼)
             self.stimulus_cache.put(mtf_value, img_mtf)
             
             return img_mtf
             
         except Exception as e:
             print(f"⚠️ Error generating stimulus: {e}")
+            return None
+            
+    def generate_and_cache_base64_image(self, mtf_value: float) -> Optional[str]:
+        """
+        Generate stimulus image and return pre-encoded base64 string
+        This eliminates the need for repeated encoding in image_display.py
+        """
+        try:
+            # 先檢查是否已有 base64 緩存
+            cache_key = f"base64_{mtf_value}"
+            if hasattr(self, 'base64_cache'):
+                if cache_key in self.base64_cache:
+                    print(f"🚀 Base64 cache hit for MTF {mtf_value:.1f}%")
+                    return self.base64_cache[cache_key]
+            else:
+                self.base64_cache = {}
+            
+            # 生成 numpy 圖片
+            img_mtf = self.generate_stimulus_image(mtf_value)
+            if img_mtf is None:
+                return None
+            
+            # 立即編碼為 base64 (一次性編碼，避免重複)
+            print(f"🔄 Pre-encoding MTF {mtf_value:.1f}% to base64...")
+            start_time = time.time()
+            
+            # 使用與 image_display.py 相同的編碼邏輯
+            import cv2
+            import base64
+            
+            # RGB → BGR 轉換
+            image_bgr = cv2.cvtColor(img_mtf, cv2.COLOR_RGB2BGR)
+            
+            # PNG 編碼 (無損)
+            encode_params = [cv2.IMWRITE_PNG_COMPRESSION, 9]
+            success, encoded_img = cv2.imencode('.png', image_bgr, encode_params)
+            
+            if not success:
+                print("❌ PNG encoding failed")
+                return None
+            
+            # Base64 編碼
+            img_base64 = base64.b64encode(encoded_img.tobytes()).decode('utf-8')
+            
+            end_time = time.time()
+            encoding_time = (end_time - start_time) * 1000
+            print(f"✅ Base64 encoding completed in {encoding_time:.2f}ms ({len(img_base64)} chars)")
+            
+            # 緩存編碼後的 base64 字串
+            self.base64_cache[cache_key] = img_base64
+            
+            return img_base64
+            
+        except Exception as e:
+            print(f"❌ Error in base64 generation: {e}")
             return None
     
     def get_next_trial(self) -> Optional[Dict]:
