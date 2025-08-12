@@ -110,7 +110,7 @@ def _display_stimulus_selection() -> None:
 def _get_available_images(stimuli_dir: str) -> List[Tuple[str, str]]:
     """Get list of available stimulus images"""
     available_images = []
-    image_files = ["stimuli_img.png", "text_img.png", "tw_newsimg.png", "us_newsimg.png", "bilingual_news.png", "working.png"]
+    image_files = ["stimuli_img.png", "tw_newsimg.png", "us_newsimg.png", "bilingual_news.png", "working.png"]
 
     for img_file in image_files:
         img_path = os.path.join(stimuli_dir, img_file)
@@ -125,7 +125,6 @@ def _display_image_grid(available_images: List[Tuple[str, str]]) -> None:
 
     caption_map = {
         'stimuli_img.png': '原始刺激圖',
-        'text_img.png': '文字圖像',
         'tw_newsimg.png': '台灣新聞',
         'us_newsimg.png': '美國新聞',
         'bilingual_news.png': '雙語新聞',
@@ -165,7 +164,6 @@ def _show_current_selection() -> None:
         selected_filename = os.path.basename(st.session_state.selected_stimulus_image)
         caption_map = {
             'stimuli_img.png': '原始刺激圖',
-            'text_img.png': '文字圖像',
             'tw_newsimg.png': '台灣新聞',
             'us_newsimg.png': '美國新聞',
             'bilingual_news.png': '雙語新聞',
@@ -298,7 +296,6 @@ def _show_stimulus_info(df: pd.DataFrame) -> None:
         if len(stimulus_files) > 0:
             caption_map = {
                 'stimuli_img.png': '原始刺激圖',
-                'text_img.png': '文字圖像',
                 'tw_newsimg.png': '台灣新聞',
                 'us_newsimg.png': '美國新聞',
                 'bilingual_news.png': '雙語新聞',

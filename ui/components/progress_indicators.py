@@ -20,18 +20,20 @@ def show_animated_fixation(elapsed: float) -> None:
         # Calculate rotation angle based on elapsed time
         rotation_angle = (elapsed * 360) % 360
         
-        # Create animated fixation cross
+        # Create animated fixation cross with stimulus-matched dimensions
         fixation_html = f"""
         <div style="
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 300px;
-            font-size: 48px;
+            width: 1240px;
+            height: 1240px;
+            font-size: 200px;
             color: #333;
             background: #f0f0f0;
+            border: 1px solid #ddd;
             border-radius: 10px;
-            margin: 20px 0;
+            margin: 20px auto;
         ">
             <div style="
                 transform: rotate({rotation_angle}deg);
@@ -42,9 +44,6 @@ def show_animated_fixation(elapsed: float) -> None:
         """
         
         st.markdown(fixation_html, unsafe_allow_html=True)
-        
-        # Show elapsed time
-        st.info(f"⏱️ Fixation: {elapsed:.1f}s")
         
     except Exception as e:
         logger.error(f"Error showing animated fixation: {e}")
@@ -80,10 +79,10 @@ def show_resumable_css_fixation(duration: float, elapsed_time: float) -> None:
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 100px;
-            height: 100px;
-            border: 3px solid #ddd;
-            border-top: 3px solid #007bff;
+            width: 400px;
+            height: 400px;
+            border: 8px solid #ddd;
+            border-top: 8px solid #007bff;
             border-radius: 50%;
             animation: progress-fill {duration}s linear {animation_delay}s;
             animation-play-state: running;
@@ -108,12 +107,14 @@ def show_resumable_css_fixation(duration: float, elapsed_time: float) -> None:
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 300px;
-            font-size: 48px;
+            width: 1240px;
+            height: 1240px;
+            font-size: 200px;
             color: #333;
             background: #f0f0f0;
+            border: 1px solid #ddd;
             border-radius: 10px;
-            margin: 20px 0;
+            margin: 20px auto;
             position: relative;
         ">
             <div class="fixation-cross">+</div>
@@ -124,12 +125,6 @@ def show_resumable_css_fixation(duration: float, elapsed_time: float) -> None:
 
     except Exception as e:
         logger.error(f"Error showing resumable CSS fixation: {e}")
-        st.markdown("### <center>+</center>", unsafe_allow_html=True)
-        
-        st.markdown(fixation_html, unsafe_allow_html=True)
-        
-    except Exception as e:
-        logger.error(f"Error showing CSS fixation: {e}")
         # Fallback to simple display
         st.markdown("### <center>+</center>", unsafe_allow_html=True)
 

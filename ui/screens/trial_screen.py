@@ -124,6 +124,63 @@ def _predict_next_mtf_value(exp_manager, session_manager):
         logger.error(f"Error in MTF prediction: {e}")
         return None
 
+def _display_fixation_with_staged_layout(elapsed_time, session_manager, experiment_controller):
+    """
+    Display fixation cross with staged layout matching stimulus session design
+    
+    Args:
+        elapsed_time: Current elapsed time in seconds
+        session_manager: SessionStateManager instance
+        experiment_controller: ExperimentController instance
+    """
+    try:
+        # Initialize fixation containers if not exists
+        if 'fixation_containers' not in st.session_state:
+            st.session_state.fixation_containers = {
+                'header': st.empty(),
+                'progress': st.empty(),
+                'content': st.empty(),
+                'timer': st.empty()
+            }
+        
+        containers = st.session_state.fixation_containers
+        
+        # Stage 1: Header
+        with containers['header'].container():
+            st.subheader("請專注注視十字中心")
+        
+        # Stage 2: Progress indicator
+        with containers['progress'].container():
+            progress = experiment_controller.get_experiment_progress()
+            from ui.components.progress_indicators import show_trial_progress
+            show_trial_progress(
+                progress['current_trial'],
+                progress['total_trials'],
+                progress['is_practice'],
+                session_manager.get_practice_trials_completed()
+            )
+        
+        # Stage 3: Content - Fixation Cross
+        with containers['content'].container():
+            from ui.components.progress_indicators import show_animated_fixation
+            show_animated_fixation(elapsed_time)
+        
+        # Stage 4: Timer - Blue info box
+        with containers['timer'].container():
+            fixation_duration = session_manager.get_fixation_duration()
+            remaining_time = fixation_duration - elapsed_time
+            if remaining_time > 0:
+                st.info(f"⏱️ 固視時間: {elapsed_time:.1f}s / {fixation_duration:.1f}s")
+            else:
+                st.info("⏱️ 固視完成，準備顯示刺激")
+                
+    except Exception as e:
+        logger.error(f"Error in staged fixation layout: {e}")
+        # Fallback to simple fixation display
+        from ui.components.progress_indicators import show_animated_fixation
+        show_animated_fixation(elapsed_time)
+        st.info(f"⏱️ 固視時間: {elapsed_time:.1f}s")
+
 def _display_stimulus_with_staged_loading(trial_data, session_manager, experiment_controller):
     """Display stimulus screen with staged loading for better UX"""
     try:
@@ -289,12 +346,12 @@ def _display_trial_content(trial_data, session_manager, experiment_controller):
         phase_start_time = st.session_state.get('phase_start_time', current_time)
         phase_elapsed = current_time - phase_start_time
         
-        # --- Fixation Phase (Legacy Implementation) --- #
+        # --- Fixation Phase (Staged Layout Implementation) --- #
         if st.session_state.trial_phase == 'fixation':
             fixation_duration = session_manager.get_fixation_duration()
             
-            # Call the legacy animation function directly. It includes its own timer display.
-            show_animated_fixation(phase_elapsed)
+            # Use new staged layout matching stimulus session design
+            _display_fixation_with_staged_layout(phase_elapsed, session_manager, experiment_controller)
 
             # Check if fixation period is over
             if phase_elapsed >= fixation_duration:
@@ -394,6 +451,7 @@ def _prepare_next_trial(session_manager):
         'trial_phase', 'phase_start_time', 'feedback_response', 'feedback_time',
         'pregeneration_completed', 'pregeneration_mtf', 'pregeneration_time',  # Clear pregeneration flags
         'stimulus_containers', 'stimulus_first_load', 'trial_response_data',  # Clear staged loading data
+        'fixation_containers',  # Clear fixation containers
         'image_container'  # Clear image containers
     ]
     
@@ -445,7 +503,8 @@ def _display_practice_completion(session_manager):
             
             # Clear trial-specific session state
             keys_to_clear = ['trial_phase', 'phase_start_time', 'feedback_response', 'feedback_time', 
-                           'pregeneration_completed', 'pregeneration_mtf', 'pregeneration_time']
+                           'pregeneration_completed', 'pregeneration_mtf', 'pregeneration_time',
+                           'fixation_containers', 'stimulus_containers']
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -496,7 +555,8 @@ def _display_practice_completion(session_manager):
             
             # Clear trial-specific session state
             keys_to_clear = ['trial_phase', 'phase_start_time', 'feedback_response', 'feedback_time', 
-                           'pregeneration_completed', 'pregeneration_mtf', 'pregeneration_time']
+                           'pregeneration_completed', 'pregeneration_mtf', 'pregeneration_time',
+                           'fixation_containers', 'stimulus_containers']
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
