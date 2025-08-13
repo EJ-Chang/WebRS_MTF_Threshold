@@ -2,7 +2,7 @@
 Instructions screen for WebRS MTF Threshold experiment.
 """
 import streamlit as st
-from ui.components.response_buttons import create_navigation_buttons
+from ui.components.response_buttons import create_navigation_buttons, apply_ui_scaling
 from utils.logger import get_logger
 from config.settings import MAX_TRIALS, MIN_TRIALS, CONVERGENCE_THRESHOLD
 
@@ -16,6 +16,9 @@ def display_instructions_screen(session_manager) -> None:
         session_manager: SessionStateManager instance
     """
     try:
+        # Apply 1.5x UI scaling
+        apply_ui_scaling()
+        
         st.header("🎯 實驗說明")
         st.markdown("---")
         

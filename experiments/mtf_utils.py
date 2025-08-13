@@ -341,12 +341,13 @@ def normalize_for_psychopy(image):
 def load_and_prepare_image(image_path, use_right_half=True):
     """載入圖片並準備用於 MTF 處理
     
-    載入圖片檔案，轉換為 RGB 格式，統一裁切為中心1200x1200正方形。
-    這個修改解決了UI布局問題，確保所有圖片具有一致的顯示尺寸。
+    載入圖片檔案，轉換為 RGB 格式，根據圖片類型進行不同的裁切策略：
+    - stimuli_img.png：右下角 1200x1200 裁切（適用於主角位於右側的照片）
+    - 其他圖片：中心 1200x1200 裁切
     
     Args:
         image_path (str): 圖片檔案路徑
-        use_right_half (bool, optional): 保留以兼容性，但現在統一使用中心裁切
+        use_right_half (bool, optional): 保留以兼容性，實際裁切策略由圖片檔名決定
         
     Returns:
         numpy.ndarray: 準備好的 RGB 圖片陣列 (1200x1200)
@@ -356,10 +357,12 @@ def load_and_prepare_image(image_path, use_right_half=True):
         ValueError: 當圖片無法正確載入時
         
     Example:
-        >>> # 統一1200x1200中心裁切
+        >>> # stimuli_img.png 使用右下角裁切
         >>> base_img = load_and_prepare_image('stimuli_img.png')
         >>> print(base_img.shape)  # (1200, 1200, 3)
-        >>> img_mtf = apply_mtf_to_image(base_img, 45.0)
+        >>> # 其他圖片使用中心裁切
+        >>> text_img = load_and_prepare_image('tw_newsimg.png')
+        >>> print(text_img.shape)  # (1200, 1200, 3)
     """
     
     # 載入圖片
@@ -376,24 +379,32 @@ def load_and_prepare_image(image_path, use_right_half=True):
     else:
         raise ValueError("不支援的圖片格式")
     
-    # 統一裁切為1200x1200中心正方形
+    # 根據不同圖片使用不同裁切策略
     height, width = img_rgb.shape[:2]
     image_name = os.path.basename(image_path).lower()
     
     # 目標尺寸
     target_size = 1200
     
-    # 計算中心裁切區域
-    center_y = height // 2
-    center_x = width // 2
-    
-    # 計算裁切範圍（確保不超出圖片邊界）
-    half_target = target_size // 2
-    
-    start_y = max(0, center_y - half_target)
-    end_y = min(height, center_y + half_target)
-    start_x = max(0, center_x - half_target)
-    end_x = min(width, center_x + half_target)
+    # 特殊處理：stimuli_img.png 使用右下角裁切，其他圖片使用中心裁切
+    if image_name == 'stimuli_img.png':
+        # 右下角裁切：從圖片右下角取 1200x1200
+        start_x = max(0, width - target_size)
+        end_x = width
+        start_y = max(0, height - target_size)
+        end_y = height
+        print(f"{image_name} 右下角裁切：從 {width}x{height} 取右下角 {target_size}x{target_size}")
+    else:
+        # 中心裁切：從圖片中心取 1200x1200
+        center_y = height // 2
+        center_x = width // 2
+        half_target = target_size // 2
+        
+        start_y = max(0, center_y - half_target)
+        end_y = min(height, center_y + half_target)
+        start_x = max(0, center_x - half_target)
+        end_x = min(width, center_x + half_target)
+        print(f"{image_name} 中心裁切：從 {width}x{height} 取中心 {target_size}x{target_size}")
     
     # 如果原圖小於目標尺寸，調整裁切區域以最大化使用原圖
     actual_height = end_y - start_y
@@ -438,7 +449,8 @@ def load_and_prepare_image(image_path, use_right_half=True):
             img_cropped = cv2.resize(img_cropped, (target_size, target_size), interpolation=cv2.INTER_LANCZOS4)
     
     final_height, final_width = img_cropped.shape[:2]
-    print(f"{image_name}統一裁切：從 {width}x{height} → {final_width}x{final_height} (中心1200x1200)")
+    crop_type = "右下角" if image_name == 'stimuli_img.png' else "中心"
+    print(f"{image_name} {crop_type}裁切：從 {width}x{height} → {final_width}x{final_height} (目標1200x1200)")
     
     return img_cropped
 

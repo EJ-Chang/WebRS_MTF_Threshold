@@ -4,7 +4,7 @@ Trial screen for WebRS MTF Threshold experiment.
 import streamlit as st
 import time
 from ui.components.image_display import display_mtf_stimulus_image
-from ui.components.response_buttons import create_response_buttons
+from ui.components.response_buttons import create_response_buttons, apply_ui_scaling
 from ui.components.progress_indicators import (
     show_trial_progress, show_animated_fixation, show_feedback_message
 )
@@ -289,6 +289,9 @@ def display_trial_screen(session_manager, experiment_controller) -> None:
         session_manager: SessionStateManager instance
         experiment_controller: ExperimentController instance
     """
+    # Apply 1.5x UI scaling
+    apply_ui_scaling()
+    
     # Create a single, persistent placeholder for all trial content.
     if 'trial_placeholder' not in st.session_state:
         st.session_state.trial_placeholder = st.empty()

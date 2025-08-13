@@ -4,7 +4,7 @@ Results screen for WebRS MTF Threshold experiment.
 import streamlit as st
 import pandas as pd
 from ui.components.progress_indicators import show_completion_celebration
-from ui.components.response_buttons import create_action_button
+from ui.components.response_buttons import create_action_button, apply_ui_scaling
 from utils.helpers import format_percentage, format_time_duration
 from utils.logger import get_logger
 from utils.analysis_tools import plot_psychometric_function
@@ -18,6 +18,8 @@ def display_results_screen(session_manager) -> None:
     Args:
         session_manager: SessionStateManager instance
     """
+    # Apply 1.5x UI scaling
+    apply_ui_scaling()
     try:
         # Ensure all data is saved before showing results
         _ensure_final_data_save(session_manager)

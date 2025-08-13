@@ -7,6 +7,290 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+def apply_ui_scaling():
+    """Apply 1.5x scaling to UI elements"""
+    st.markdown("""
+    <style>
+    /* True 1.5x scaling for buttons */
+    .stButton > button {
+        height: auto;
+        padding: 1.125rem 2.25rem !important;  /* 1.5x of 0.75rem 1.5rem */
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+        font-weight: 600 !important;
+        border-radius: 0.75rem !important;  /* 1.5x of 0.5rem */
+        min-height: 4.5rem !important;  /* 1.5x of 3rem */
+    }
+    
+    /* Scale button text and icons */
+    .stButton > button p {
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+        margin: 0 !important;
+    }
+    
+    /* Scale primary buttons */
+    .stButton > button[kind="primary"] {
+        height: auto;
+        padding: 1.125rem 2.25rem !important;  /* 1.5x scaling */
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+        min-height: 4.5rem !important;  /* 1.5x of 3rem */
+    }
+    
+    /* Scale secondary buttons */
+    .stButton > button[kind="secondary"] {
+        height: auto;
+        padding: 1.125rem 2.25rem !important;  /* 1.5x scaling */
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+        min-height: 4.5rem !important;  /* 1.5x of 3rem */
+    }
+    
+    /* Scale text input labels */
+    .stTextInput label {
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+        font-weight: 600 !important;
+    }
+    
+    /* Scale text input fields */
+    .stTextInput input {
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+        padding: 1.125rem !important;  /* 1.5x of 0.75rem */
+    }
+    
+    /* Scale headers and text - True 1.5x scaling */
+    h1 {
+        font-size: 3.375rem !important;  /* 1.5x of 2.25rem (36px → 54px) */
+    }
+    
+    h2 {
+        font-size: 2.8125rem !important;  /* 1.5x of 1.875rem (30px → 45px) */
+    }
+    
+    h3 {
+        font-size: 2.25rem !important;  /* 1.5x of 1.5rem (24px → 36px) */
+    }
+    
+    /* Scale general text - True 1.5x scaling */
+    .stMarkdown p {
+        font-size: 1.5rem !important;  /* 1.5x of 1rem (16px → 24px) */
+        line-height: 1.65 !important;  /* Adjusted for larger text */
+    }
+    
+    /* Scale all markdown text elements */
+    .stMarkdown {
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+    }
+    
+    /* Scale metrics */
+    .metric-container {
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+    }
+    
+    /* Scale checkbox text */
+    .stCheckbox label {
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+    }
+    
+    /* Scale expander text */
+    .streamlit-expanderHeader {
+        font-size: 1.5rem !important;  /* True 1.5x scaling */
+    }
+    
+    /* Scale sidebar text */
+    .css-1d391kg {
+        font-size: 1.5rem !important;
+    }
+    
+    /* Scale info/warning/error boxes */
+    .stAlert {
+        font-size: 1.5rem !important;
+    }
+    
+    /* Scale success messages */
+    .stSuccess {
+        font-size: 1.5rem !important;
+    }
+    
+    /* Scale file uploader text */
+    .stFileUploader label {
+        font-size: 1.5rem !important;
+    }
+    
+    /* Scale column text */
+    .stColumns {
+        font-size: 1.5rem !important;
+    }
+    
+    /* Scale caption text */
+    .stImage figcaption {
+        font-size: 1.35rem !important;  /* Slightly smaller than main text but still scaled */
+    }
+    
+    /* === 修正遺漏的介面文字元素 1.5x 放大 === */
+    
+    /* 修正 st.write 內的列表項目 */
+    .stMarkdown ul li {
+        font-size: 1.5rem !important;  /* 列表項目 1.5x */
+        line-height: 1.65 !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .stMarkdown ol li {
+        font-size: 1.5rem !important;  /* 編號列表項目 1.5x */
+        line-height: 1.65 !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* 修正粗體文字 */
+    .stMarkdown strong {
+        font-size: 1.5rem !important;  /* 粗體文字 1.5x */
+    }
+    
+    .stMarkdown b {
+        font-size: 1.5rem !important;  /* 粗體文字 1.5x */
+    }
+    
+    /* 修正 help 提示文字 */
+    .stTextInput .help-tooltip {
+        font-size: 1.35rem !important;  /* Help 文字略小但仍放大 */
+    }
+    
+    .stCheckbox .help-tooltip {
+        font-size: 1.35rem !important;
+    }
+    
+    .stSelectbox .help-tooltip {
+        font-size: 1.35rem !important;
+    }
+    
+    /* 修正訊息框內容 */
+    .stInfo {
+        font-size: 1.5rem !important;
+    }
+    
+    .stInfo .markdown-text-container {
+        font-size: 1.5rem !important;
+    }
+    
+    .stWarning {
+        font-size: 1.5rem !important;
+    }
+    
+    .stWarning .markdown-text-container {
+        font-size: 1.5rem !important;
+    }
+    
+    .stError {
+        font-size: 1.5rem !important;
+    }
+    
+    .stError .markdown-text-container {
+        font-size: 1.5rem !important;
+    }
+    
+    .stSuccess {
+        font-size: 1.5rem !important;
+    }
+    
+    .stSuccess .markdown-text-container {
+        font-size: 1.5rem !important;
+    }
+    
+    /* 修正三欄佈局中的文字 */
+    .stColumns .stMarkdown {
+        font-size: 1.5rem !important;
+    }
+    
+    .stColumns .stMarkdown p {
+        font-size: 1.5rem !important;
+        line-height: 1.65 !important;
+    }
+    
+    .stColumns .stMarkdown li {
+        font-size: 1.5rem !important;
+        line-height: 1.65 !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .stColumns .stMarkdown strong {
+        font-size: 1.5rem !important;
+    }
+    
+    /* 通用 Streamlit 內部元件修正 */
+    [data-testid="stMarkdownContainer"] {
+        font-size: 1.5rem !important;
+    }
+    
+    [data-testid="stMarkdownContainer"] p {
+        font-size: 1.5rem !important;
+        line-height: 1.65 !important;
+    }
+    
+    [data-testid="stMarkdownContainer"] li {
+        font-size: 1.5rem !important;
+        line-height: 1.65 !important;
+    }
+    
+    [data-testid="stMarkdownContainer"] strong {
+        font-size: 1.5rem !important;
+    }
+    
+    /* 修正更多可能遺漏的元件 */
+    .stTextArea label {
+        font-size: 1.5rem !important;
+    }
+    
+    .stNumberInput label {
+        font-size: 1.5rem !important;
+    }
+    
+    .stDateInput label {
+        font-size: 1.5rem !important;
+    }
+    
+    .stTimeInput label {
+        font-size: 1.5rem !important;
+    }
+    
+    /* 修正 DataFrame 顯示 */
+    .stDataFrame {
+        font-size: 1.35rem !important;  /* 表格文字略小但仍放大 */
+    }
+    
+    /* 修正 JSON 顯示 */
+    .stJson {
+        font-size: 1.35rem !important;
+    }
+    
+    /* 修正代碼塊顯示 */
+    .stCodeBlock {
+        font-size: 1.35rem !important;
+    }
+    
+    /* 修正度量指標顯示 */
+    .stMetric .metric-label {
+        font-size: 1.35rem !important;
+    }
+    
+    .stMetric .metric-value {
+        font-size: 2.25rem !important;  /* 度量值更大 */
+    }
+    
+    /* 確保所有容器內的文字都被放大 */
+    .main .block-container {
+        font-size: 1.5rem !important;
+    }
+    
+    .main .block-container p {
+        font-size: 1.5rem !important;
+        line-height: 1.65 !important;
+    }
+    
+    .main .block-container li {
+        font-size: 1.5rem !important;
+        line-height: 1.65 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 def create_response_buttons(
     left_label: str = "不清楚",
     right_label: str = "清楚", 
@@ -26,6 +310,9 @@ def create_response_buttons(
         Tuple of (left_pressed, right_pressed)
     """
     try:
+        # Apply UI scaling for buttons
+        apply_ui_scaling()
+        
         # Create two columns for side-by-side buttons
         col1, col2 = st.columns(2)
         
@@ -76,6 +363,9 @@ def create_navigation_buttons(
         Tuple of (back_pressed, next_pressed)
     """
     try:
+        # Apply UI scaling for buttons
+        apply_ui_scaling()
+        
         cols = st.columns([1, 1] if show_back and show_next else [1])
         
         back_pressed = False
@@ -142,6 +432,9 @@ def create_action_button(
         Whether button was pressed
     """
     try:
+        # Apply UI scaling for buttons
+        apply_ui_scaling()
+        
         return st.button(
             label,
             key=key,
@@ -171,6 +464,9 @@ def create_start_button(
         Whether button was pressed
     """
     try:
+        # Apply UI scaling for buttons
+        apply_ui_scaling()
+        
         return st.button(
             f"🚀 開始{experiment_name}",
             key=f"start_experiment_{key_suffix}",

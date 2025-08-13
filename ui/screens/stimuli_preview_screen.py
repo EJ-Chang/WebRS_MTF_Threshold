@@ -6,7 +6,7 @@ import streamlit as st
 import os
 from PIL import Image
 from experiments.mtf_utils import load_and_prepare_image
-from ui.components.response_buttons import create_action_button
+from ui.components.response_buttons import create_action_button, apply_ui_scaling
 from ui.components.image_display import display_mtf_stimulus_image
 from utils.logger import get_logger
 
@@ -20,6 +20,9 @@ def display_stimuli_preview_screen(session_manager) -> None:
         session_manager: SessionStateManager instance
     """
     try:
+        # Apply 1.5x UI scaling
+        apply_ui_scaling()
+        
         st.title("🔍 刺激圖像預覽")
         st.markdown("---")
 

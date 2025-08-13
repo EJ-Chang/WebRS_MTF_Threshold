@@ -7,7 +7,7 @@ import os
 from PIL import Image
 from typing import List, Tuple, Optional
 from mtf_experiment import MTFExperimentManager
-from ui.components.response_buttons import create_action_button
+from ui.components.response_buttons import create_action_button, apply_ui_scaling
 from utils.logger import get_logger
 from config.settings import MAX_TRIALS, MIN_TRIALS, CONVERGENCE_THRESHOLD, STIMULUS_DURATION
 
@@ -21,6 +21,9 @@ def display_welcome_screen(session_manager) -> None:
         session_manager: SessionStateManager instance
     """
     try:
+        # Apply 1.5x UI scaling
+        apply_ui_scaling()
+        
         st.title("🧠 MTF 清晰度測試實驗")
         st.markdown("*重構版本 - 模組化架構*")
         st.markdown("---")
